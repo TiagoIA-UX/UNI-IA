@@ -1,0 +1,20 @@
+# Node/Next
+node_modules/
+.next/
+
+# Environment secrets
+.env
+.env.local
+.env.*
+!.env.example
+
+# Workspace app env
+zairyx-blog/.env
+zairyx-blog/.env.local
+zairyx-blog/.env.*
+!zairyx-blog/.env.example
+
+# Secret backups
+.secrets-backup/
+*.bak
+*.backup
