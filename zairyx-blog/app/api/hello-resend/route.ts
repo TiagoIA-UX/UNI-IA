@@ -15,9 +15,9 @@ export async function POST(req: NextRequest) {
 
     // Disparo oficial transacional via Resend
     const data = await resend.emails.send({
-      from: 'Zairyx IA <onboarding@zairyx.ia>',
+      from: 'UNI IA <onboarding@zairyx.ia>',
       to: email,
-      subject: `Zairyx IA - Sua jornada rumo ao plano ${plan || 'PRO'} começou!`,
+      subject: `UNI IA - Sua jornada rumo ao plano ${plan || 'PRO'} começou!`,
       html: `
         <div style="font-family: sans-serif; color: #111;">
           <h2>Bem-vindo à revolução financeira, investidor(a)!</h2>
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
           <p>Acesse seu perfil do Supabase e finalize a assinatura no link seguro:</p>
           <a href="https://pay.stripe.com/p/link/assinar-zairyx-pro">Completar Inscrição Premium</a>
           <br/><br/>
-          <small>Robô Ph.D da Zairyx. Resolução 100% livre de humanos.</small>
+          <small>Robô Ph.D da UNI IA. Resolução 100% livre de humanos.</small>
         </div>
       `
     });

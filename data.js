@@ -7,6 +7,28 @@ const DataLayer = (() => {
   // Cache de dados buscados
   const cache = new Map();
   const CACHE_TTL = 60_000; // 1 minuto
+  const dataQuality = new Map();
+  const STRICT_REAL_DATA = true;
+
+  function qualityKey(assetKey, timeframe) {
+    return `${assetKey || 'unknown'}::${timeframe || 'na'}`;
+  }
+
+  function updateQuality(assetKey, timeframe, patch) {
+    const key = qualityKey(assetKey, timeframe);
+    const prev = dataQuality.get(key) || {
+      assetKey,
+      timeframe,
+      candlesReal: false,
+      quoteReal: false,
+      newsReal: false,
+      candlesSource: 'unknown',
+      quoteSource: 'unknown',
+      newsSource: 'unknown',
+      updatedAt: Date.now(),
+    };
+    dataQuality.set(key, { ...prev, ...patch, updatedAt: Date.now() });
+  }
 
   // ===== CONFIG DE ATIVOS =====
   const ASSETS = {
@@ -64,7 +86,10 @@ const DataLayer = (() => {
       }));
       cache.set(key, { ts: Date.now(), data: candles });
       return candles;
-    } catch {
+    } catch (err) {
+      if (STRICT_REAL_DATA) {
+        throw new Error(`Falha ao obter candles reais da Binance para ${symbol}/${interval}: ${err.message || err}`);
+      }
       return generateSimulatedCandles(symbol, limit, interval);
     }
   }
@@ -123,7 +148,10 @@ const DataLayer = (() => {
       };
       cache.set(key, { ts: Date.now(), data });
       return data;
-    } catch {
+    } catch (err) {
+      if (STRICT_REAL_DATA) {
+        throw new Error(`Falha ao obter dados reais da BRAPI para ${symbol}: ${err.message || err}`);
+      }
       return generateSimulatedB3(symbol, interval);
     }
   }
@@ -160,7 +188,10 @@ const DataLayer = (() => {
       const data = { candles, price: current, change: ((current - prev) / prev) * 100 };
       cache.set(key, { ts: Date.now(), data });
       return data;
-    } catch {
+    } catch (err) {
+      if (STRICT_REAL_DATA) {
+        throw new Error(`Falha ao obter dados reais de Forex para ${base}/${quote}: ${err.message || err}`);
+      }
       return generateSimulatedForex(base, quote, days);
     }
   }
@@ -183,7 +214,10 @@ const DataLayer = (() => {
         source: item.querySelector('source')?.textContent || 'Google News',
         sentiment: classifyNewsSentiment(item.querySelector('title')?.textContent || ''),
       }));
-    } catch {
+    } catch (err) {
+      if (STRICT_REAL_DATA) {
+        throw new Error(`Falha ao obter noticias reais para ${asset}: ${err.message || err}`);
+      }
       return generateSimulatedNews(asset);
     }
   }
@@ -219,7 +253,7 @@ const DataLayer = (() => {
       candles.push({ time: now - i * msPerCandle, open, high, low, close, volume });
       price = close;
     }
-    return candles;
+    return candles.map(c => ({ ...c, __simulated: true, __source: 'simulated' }));
   }
 
   function generateSimulatedB3(symbol, interval) {
@@ -242,7 +276,13 @@ const DataLayer = (() => {
       });
       price = close;
     }
-    return { candles, price, change: ((price - bases[symbol]) / bases[symbol]) * 100 };
+    return {
+      candles: candles.map(c => ({ ...c, __simulated: true, __source: 'simulated' })),
+      price,
+      change: ((price - bases[symbol]) / bases[symbol]) * 100,
+      __simulated: true,
+      __source: 'simulated',
+    };
   }
 
   function generateSimulatedForex(base, quote, days) {
@@ -261,7 +301,13 @@ const DataLayer = (() => {
       });
       price = close;
     }
-    return { candles, price, change: ((price - (bases[`${base}_${quote}`] || 1)) / (bases[`${base}_${quote}`] || 1)) * 100 };
+    return {
+      candles: candles.map(c => ({ ...c, __simulated: true, __source: 'simulated' })),
+      price,
+      change: ((price - (bases[`${base}_${quote}`] || 1)) / (bases[`${base}_${quote}`] || 1)) * 100,
+      __simulated: true,
+      __source: 'simulated',
+    };
   }
 
   function generateSimulatedNews(asset) {
@@ -273,7 +319,7 @@ const DataLayer = (() => {
       { title: `Gestores aumentam exposição em ${asset}`, sentiment: 'positive' },
       { title: `Volume em ${asset} supera média histórica recente`, sentiment: 'neutral' },
     ];
-    return templates.map(t => ({ ...t, date: new Date().toLocaleString('pt-BR'), source: 'Análise interna' }));
+    return templates.map(t => ({ ...t, date: new Date().toLocaleString('pt-BR'), source: 'Análise interna', __simulated: true, __source: 'simulated' }));
   }
 
   function intervalToMs(interval) {
@@ -284,23 +330,50 @@ const DataLayer = (() => {
   // ===== API PÚBLICA =====
   async function getCandles(assetKey, timeframe = '1h', limit = 120) {
     const asset = ASSETS[assetKey];
-    if (!asset) return generateSimulatedCandles('BTCUSDT', limit, timeframe);
+    if (!asset) {
+      if (STRICT_REAL_DATA) {
+        throw new Error(`Ativo nao suportado para operacao real: ${assetKey}`);
+      }
+      const simulated = generateSimulatedCandles('BTCUSDT', limit, timeframe);
+      updateQuality(assetKey, timeframe, { candlesReal: false, candlesSource: 'simulated' });
+      return simulated;
+    }
 
     if (asset.type === 'crypto') {
       const interval = TF_BINANCE[timeframe] || '1h';
-      return fetchBinanceKlines(asset.symbol, interval, limit);
+      const candles = await fetchBinanceKlines(asset.symbol, interval, limit);
+      const simulated = candles.some(c => c.__simulated === true);
+      updateQuality(assetKey, timeframe, { candlesReal: !simulated, candlesSource: simulated ? 'simulated' : 'binance' });
+      return candles;
     }
     if (asset.type === 'b3') {
       const tf = timeframe === '5m' || timeframe === '15m' ? '5m' : timeframe === '1h' ? '1h' : '1d';
       const range = timeframe === '1w' ? '1y' : '3mo';
       const data = await fetchBRAPI(asset.symbol, tf, range);
-      return data.candles || generateSimulatedCandles(asset.symbol, limit, timeframe);
+      const candles = data.candles || generateSimulatedCandles(asset.symbol, limit, timeframe);
+      const simulated = data.__simulated === true || candles.some(c => c.__simulated === true);
+      if (STRICT_REAL_DATA && simulated) {
+        throw new Error(`Candles simulados detectados para ${asset.symbol}. Operacao bloqueada.`);
+      }
+      updateQuality(assetKey, timeframe, { candlesReal: !simulated, candlesSource: simulated ? 'simulated' : 'brapi' });
+      return candles;
     }
     if (asset.type === 'forex') {
       const data = await fetchForex(asset.base, asset.quote, limit);
-      return data.candles || generateSimulatedForex(asset.base, asset.quote, limit);
+      const candles = data.candles || generateSimulatedForex(asset.base, asset.quote, limit).candles;
+      const simulated = data.__simulated === true || candles.some(c => c.__simulated === true);
+      if (STRICT_REAL_DATA && simulated) {
+        throw new Error(`Candles simulados detectados para ${asset.base}/${asset.quote}. Operacao bloqueada.`);
+      }
+      updateQuality(assetKey, timeframe, { candlesReal: !simulated, candlesSource: simulated ? 'simulated' : 'frankfurter' });
+      return candles;
     }
-    return generateSimulatedCandles(assetKey, limit, timeframe);
+    if (STRICT_REAL_DATA) {
+      throw new Error(`Tipo de ativo nao suportado em modo real estrito: ${asset.type}`);
+    }
+    const fallback = generateSimulatedCandles(assetKey, limit, timeframe);
+    updateQuality(assetKey, timeframe, { candlesReal: false, candlesSource: 'simulated' });
+    return fallback;
   }
 
   async function getQuote(assetKey) {
@@ -308,30 +381,61 @@ const DataLayer = (() => {
     if (!asset) return null;
     if (asset.type === 'crypto') {
       const ticker = await fetchBinanceTicker(asset.symbol);
-      if (ticker) return {
-        price: parseFloat(ticker.lastPrice),
-        change: parseFloat(ticker.priceChangePercent),
-        volume: parseFloat(ticker.volume),
-        high: parseFloat(ticker.highPrice),
-        low: parseFloat(ticker.lowPrice),
-      };
+      if (ticker) {
+        updateQuality(assetKey, null, { quoteReal: true, quoteSource: 'binance' });
+        return {
+          price: parseFloat(ticker.lastPrice),
+          change: parseFloat(ticker.priceChangePercent),
+          volume: parseFloat(ticker.volume),
+          high: parseFloat(ticker.highPrice),
+          low: parseFloat(ticker.lowPrice),
+        };
+      }
+      if (STRICT_REAL_DATA) {
+        throw new Error(`Quote real indisponivel para ativo cripto ${asset.symbol}`);
+      }
+      updateQuality(assetKey, null, { quoteReal: false, quoteSource: 'unavailable' });
     }
     if (asset.type === 'b3') {
       const data = await fetchBRAPI(asset.symbol);
+      const simulated = data.__simulated === true;
+      if (STRICT_REAL_DATA && simulated) {
+        throw new Error(`Quote simulado detectado para ${asset.symbol}. Operacao bloqueada.`);
+      }
+      updateQuality(assetKey, null, { quoteReal: !simulated, quoteSource: simulated ? 'simulated' : 'brapi' });
       return { price: data.price, change: data.change, volume: data.volume, pe: data.pe, dy: data.dy };
     }
     if (asset.type === 'forex') {
       const data = await fetchForex(asset.base, asset.quote);
+      const simulated = data.__simulated === true;
+      if (STRICT_REAL_DATA && simulated) {
+        throw new Error(`Quote simulado detectado para ${asset.base}/${asset.quote}. Operacao bloqueada.`);
+      }
+      updateQuality(assetKey, null, { quoteReal: !simulated, quoteSource: simulated ? 'simulated' : 'frankfurter' });
       return { price: data.price, change: data.change };
     }
+    if (STRICT_REAL_DATA) {
+      throw new Error(`Tipo de ativo sem quote real suportado: ${asset.type}`);
+    }
+    updateQuality(assetKey, null, { quoteReal: false, quoteSource: 'unavailable' });
     return null;
   }
 
   async function getNews(assetKey) {
-    return fetchMarketNews(assetKey);
+    const news = await fetchMarketNews(assetKey);
+    const simulated = news.some(n => n.__simulated === true);
+    updateQuality(assetKey, null, { newsReal: !simulated, newsSource: simulated ? 'simulated' : 'google-news' });
+    return news;
   }
 
   function getAssetList() { return ASSETS; }
+  function getDataQuality(assetKey, timeframe = null) {
+    const scoped = dataQuality.get(qualityKey(assetKey, timeframe)) || {};
+    const base = dataQuality.get(qualityKey(assetKey, null)) || {};
+    const merged = { ...base, ...scoped, assetKey, timeframe };
+    if (!base.updatedAt && !scoped.updatedAt) return null;
+    return merged;
+  }
 
-  return { getCandles, getQuote, getNews, getAssetList, ASSETS };
+  return { getCandles, getQuote, getNews, getAssetList, getDataQuality, ASSETS };
 })();

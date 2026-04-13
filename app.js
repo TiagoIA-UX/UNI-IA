@@ -532,6 +532,57 @@ function renderNewsPanel() {
   `).join('');
 }
 
+function buildExecutionGateReport(context) {
+  const quality = DataLayer.getDataQuality(state.selectedAsset, state.selectedTF) || {};
+  const hasApiKey = !!AIEngine.getApiKey();
+
+  const checks = {
+    data: {
+      ok: !!quality.candlesReal && !!quality.quoteReal && !!quality.newsReal && state.candles.length >= 80 && Number.isFinite(state.quote?.price),
+      details: `candles=${quality.candlesSource || 'unknown'}, quote=${quality.quoteSource || 'unknown'}, news=${quality.newsSource || 'unknown'}`,
+    },
+    strategy: {
+      ok: !!context.technicalDirection && Number.isFinite(context.technicalConfidence) && Number.isFinite(context.patternConfidence),
+      details: `technical=${context.technicalDirection || 'na'}, confidence=${context.technicalConfidence ?? 'na'}, pattern=${context.patternConfidence ?? 'na'}`,
+    },
+    risk: {
+      ok: context.riskLevel !== 'extremo' && (context.externalConfidence ?? 0) >= 55,
+      details: `riskLevel=${context.riskLevel || 'na'}, externalConfidence=${context.externalConfidence ?? 'na'}`,
+    },
+    compliance: {
+      ok: hasApiKey,
+      details: hasApiKey ? 'IA real habilitada' : 'Groq ausente',
+    },
+  };
+
+  const failures = Object.entries(checks)
+    .filter(([, v]) => !v.ok)
+    .map(([layer, v]) => ({ layer, details: v.details }));
+
+  return {
+    allowed: failures.length === 0,
+    checks,
+    failures,
+  };
+}
+
+function renderGateBlock(report) {
+  const html = `
+    <div class="signal-box wait">
+      <div class="signal-label">Execucao bloqueada por governanca</div>
+      <div class="signal-main">BLOQUEADO</div>
+      <div class="text-xs text-dim" style="margin-top:8px">Falhas encontradas nas camadas obrigatorias:</div>
+      <ul style="margin-top:8px;padding-left:16px;font-size:12px;line-height:1.6;color:var(--text2)">
+        ${report.failures.map(f => `<li><strong>${f.layer}</strong>: ${f.details}</li>`).join('')}
+      </ul>
+    </div>
+  `;
+  document.getElementById('signal-content').innerHTML = html;
+  document.getElementById('signal-content').style.display = 'block';
+  document.getElementById('signal-loading').style.display = 'none';
+  document.getElementById('ai-reasoning-content').innerHTML = '<div class="text-dim text-sm" style="padding:20px">Analise bloqueada ate regularizar todas as camadas de validacao.</div>';
+}
+
 // ===== ANÁLISE COMPLETA =====
 async function runFullAnalysis() {
   if (!state.selectedAsset) { showToast('Selecione um ativo primeiro', 'error'); return; }
@@ -548,8 +599,14 @@ async function runFullAnalysis() {
       state.quote
     );
 
-    const useAI = !!AIEngine.getApiKey();
-    const signal = await AIEngine.analyze(context, useAI);
+    const gate = buildExecutionGateReport(context);
+    if (!gate.allowed) {
+      renderGateBlock(gate);
+      showToast('Execucao bloqueada: validacao por camadas reprovada', 'error');
+      return;
+    }
+
+    const signal = await AIEngine.analyze(context, true, { requireAI: true, blockFallback: true });
     state.lastSignal = signal;
 
     renderSignal(signal);
@@ -558,7 +615,7 @@ async function runFullAnalysis() {
     updateLearningStats();
     showToast(`Sinal gerado: ${signal.signal} (${signal.confidence}%)`, signal.signal.includes('COMPRA') ? 'success' : signal.signal.includes('VENDA') ? 'error' : 'info');
 
-    document.getElementById('signal-source').textContent = signal.source === 'groq' ? '🤖 Groq IA' : '📐 Regras';
+    document.getElementById('signal-source').textContent = signal.source === 'groq' ? '🤖 Groq IA' : '🚫 Invalido';
 
   } catch (err) {
     showToast('Erro na análise: ' + err.message, 'error');

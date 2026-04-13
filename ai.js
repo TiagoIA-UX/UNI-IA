@@ -220,7 +220,14 @@ FORMATO DA RESPOSTA (JSON estrito):
   }
 
   // ===== ANÁLISE COMPLETA =====
-  async function analyze(context, useAI = true) {
+  async function analyze(context, useAI = true, options = {}) {
+    const requireAI = options.requireAI === true;
+    const blockFallback = options.blockFallback === true;
+
+    if (requireAI && !apiKey) {
+      throw new Error('Execucao bloqueada: chave Groq obrigatoria para analise sem fallback.');
+    }
+
     let result;
     let source = 'regras';
 
@@ -230,10 +237,16 @@ FORMATO DA RESPOSTA (JSON estrito):
         result.source = 'groq';
         source = 'groq';
       } catch (err) {
+        if (blockFallback) {
+          throw new Error(`Execucao bloqueada: IA indisponivel e fallback proibido (${err.message}).`);
+        }
         console.warn('Groq falhou, usando regras:', err.message);
         result = analyzeWithRules(context);
       }
     } else {
+      if (requireAI) {
+        throw new Error('Execucao bloqueada: analise por regras nao permitida neste modo estrito.');
+      }
       result = analyzeWithRules(context);
     }
 

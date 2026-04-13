@@ -96,7 +96,7 @@ export default function PlanosPage() {
             MOST CHOSEN
           </div>
           <div>
-            <h3 className="text-2xl font-bold mb-2 text-white">Zairyx Premium</h3>
+            <h3 className="text-2xl font-bold mb-2 text-white">UNI IA Premium</h3>
             <p className="text-blue-300 text-sm">Real-time orchestration for paid traders and global desks.</p>
           </div>
           <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">

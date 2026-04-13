@@ -116,7 +116,7 @@ export const termsCopy: Record<Locale, {
   s5Body: string;
 }> = {
   en: {
-    title: 'Terms of Use - Uni IA (Zairyx)',
+    title: 'Terms of Use - UNI IA',
     intro: 'These terms define legal boundaries, risk disclosure and platform usage conditions for paid and free users.',
     s1Title: '1. Acceptance of Terms',
     s1Body: 'By using Uni IA services, you agree to these terms. The platform provides analytical intelligence and does not constitute direct investment advice.',
@@ -130,7 +130,7 @@ export const termsCopy: Record<Locale, {
     s5Body: 'No signal, scenario, performance chart or score guarantees profits. Every operation involves risk and may result in partial or total loss.',
   },
   es: {
-    title: 'Terminos de Uso - Uni IA (Zairyx)',
+    title: 'Terminos de Uso - UNI IA',
     intro: 'Estos terminos definen los limites legales, divulgacion de riesgo y condiciones de uso para clientes gratuitos y de pago.',
     s1Title: '1. Aceptacion de Terminos',
     s1Body: 'Al usar Uni IA, aceptas estos terminos. La plataforma ofrece inteligencia analitica y no constituye asesoria de inversion directa.',
@@ -144,7 +144,7 @@ export const termsCopy: Record<Locale, {
     s5Body: 'Ninguna senal, escenario, grafico de rendimiento o score garantiza ganancias. Toda operacion implica riesgo y puede generar perdida parcial o total.',
   },
   pt: {
-    title: 'Termos de Uso - Uni IA (Zairyx)',
+    title: 'Termos de Uso - UNI IA',
     intro: 'Estes termos definem limites legais, divulgacao de risco e condicoes de uso para clientes gratuitos e pagantes.',
     s1Title: '1. Aceitacao dos Termos',
     s1Body: 'Ao utilizar o Uni IA, voce concorda com estes termos. A plataforma fornece inteligencia analitica e nao constitui recomendacao direta de investimento.',
@@ -158,7 +158,7 @@ export const termsCopy: Record<Locale, {
     s5Body: 'Nenhum sinal, cenario, grafico de performance ou score garante lucro. Toda operacao envolve risco e pode resultar em perda parcial ou total.',
   },
   ar: {
-    title: 'شروط الاستخدام - Uni IA (Zairyx)',
+    title: 'شروط الاستخدام - UNI IA',
     intro: 'تحدد هذه الشروط الحدود القانونية وافصاح المخاطر وشروط استخدام المنصة.',
     s1Title: '1. قبول الشروط',
     s1Body: 'باستخدام خدمات Uni IA فانك توافق على هذه الشروط. المنصة تقدم تحليلات ولا تشكل نصيحة استثمار مباشرة.',
@@ -172,7 +172,7 @@ export const termsCopy: Record<Locale, {
     s5Body: 'لا توجد اشارة او نتيجة تاريخية تضمن الربح. كل عملية تداول تنطوي على مخاطر وقد تؤدي الى خسارة جزئية او كاملة.',
   },
   zh: {
-    title: '使用条款 - Uni IA (Zairyx)',
+    title: '使用条款 - UNI IA',
     intro: '本条款说明平台的法律边界 风险披露与使用条件。',
     s1Title: '1. 条款接受',
     s1Body: '使用 Uni IA 即表示你同意本条款。平台提供分析智能 不构成直接投资建议。',

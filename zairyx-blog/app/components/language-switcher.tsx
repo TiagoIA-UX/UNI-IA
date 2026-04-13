@@ -1,23 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { localeLabels, SUPPORTED_LOCALES } from '@/lib/i18n';
+import { useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { localeLabels, resolveLocale, SUPPORTED_LOCALES } from '@/lib/i18n';
 
 export default function LanguageSwitcher() {
   const pathname = usePathname();
   const router = useRouter();
-  const [currentLang, setCurrentLang] = useState('en');
+  const searchParams = useSearchParams();
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setCurrentLang(params.get('lang') || 'en');
-  }, []);
+  const currentLang = useMemo(() => {
+    return resolveLocale(searchParams.get('lang') || 'en');
+  }, [searchParams]);
 
   function onChange(nextLang: string) {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(searchParams.toString());
     params.set('lang', nextLang);
-    setCurrentLang(nextLang);
     router.push(`${pathname}?${params.toString()}`);
   }
 

@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from .telegram_bot import ZairyxTelegramBot
+from .telegram_bot import UniIATelegramBot
+from .copy_trade import CopyTradeService
+from .desk import PrivateDesk
 from ..agents.news_agent import NewsAgent
 from ..agents.sentiment_agent import SentimentAgent
 from ..agents.macro_agent import MacroAgent
@@ -12,7 +14,7 @@ from ..agents.position_monitor_agent import PositionMonitorAgent
 from ..agents.orchestrator_agent import OrchestratorAgent
 
 app = FastAPI(
-    title="Uni IA - by Zairyx IA",
+    title="UNI IA",
     description="API Mestre de Orquestração com Sinais de Alta Performance via IA Multi-Framework",
     version="1.0.0"
 )
@@ -25,10 +27,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+telegram_bot = UniIATelegramBot()
+copy_trade_service = CopyTradeService()
+private_desk = PrivateDesk(copy_trade_service)
+
 @app.post("/api/analyze/{asset}")
 def analyze_asset(asset: str):
     try:
-        print(f"[{asset}] INICIANDO VARREDURA PROFUNDA MILITAR ZAIRYX IA...")
+        print(f"[{asset}] INICIANDO VARREDURA PROFUNDA UNI IA...")
         
         agents_data = []
 
@@ -71,17 +77,87 @@ def analyze_asset(asset: str):
             alert.position_reversal_alert = guard.get("reversal_message")
             print(f"[{asset}] 🔥 ALERTA DE REVERSÃO DE POSIÇÃO ATIVADO!")
 
-        # Disparo Zairyx Telegram Bot
-        bot = ZairyxTelegramBot()
-        bot.dispatch_alert(alert)
+        # Disparo Telegram Bot da UNI IA
+        telegram_bot.dispatch_alert(alert)
+
+        desk_result = private_desk.handle_alert(alert)
         
         return {
             "success": True,
-            "data": alert.dict()
+            "data": alert.dict(),
+            "desk": desk_result,
         }
 
     except Exception as e:
         print(f"[ERRO DO SISTEMA - SEM FALLBACK E SEM PLACEHOLDER] -> {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/copytrade/status")
+def copytrade_status():
+    try:
+        return {
+            "success": True,
+            "data": copy_trade_service.status(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/desk/status")
+def desk_status():
+    try:
+        return {
+            "success": True,
+            "data": private_desk.status(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/desk/pending")
+def desk_pending():
+    try:
+        return {
+            "success": True,
+            "data": private_desk.list_pending(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/desk/approve/{request_id}")
+def desk_approve(request_id: str):
+    try:
+        return {
+            "success": True,
+            "data": private_desk.approve(request_id),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/desk/reject/{request_id}")
+def desk_reject(request_id: str):
+    try:
+        return {
+            "success": True,
+            "data": private_desk.reject(request_id),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/copytrade/execute/{asset}")
+def copytrade_execute(asset: str):
+    try:
+        # Reusa pipeline completo para manter as mesmas regras de validacao e governanca.
+        analysis = analyze_asset(asset)
+        return {
+            "success": True,
+            "data": analysis,
+        }
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
