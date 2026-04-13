@@ -22,7 +22,7 @@ export default async function Home({ searchParams }: HomeProps) {
         </p>
         <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <a href={`/planos?lang=${locale}`} style={{ background: 'linear-gradient(120deg, #f59e0b, #22d3ee)', color: '#0f172a', padding: '0.95rem 1.5rem', borderRadius: '0.65rem', fontWeight: 800, textDecoration: 'none', transition: 'all 0.2s', boxShadow: '0 10px 30px rgba(245,158,11,0.25)' }}>{t.primaryCta}</a>
-          <a href='https://t.me/zairyx_free' target='_blank' rel='noreferrer' style={{ background: 'transparent', color: '#e2e8f0', padding: '0.95rem 1.5rem', borderRadius: '0.65rem', fontWeight: 700, textDecoration: 'none', border: '1px solid #475569' }}>{t.secondaryCta}</a>
+          <a href='https://t.me/uni_ia_free_bot' target='_blank' rel='noreferrer' style={{ background: 'transparent', color: '#e2e8f0', padding: '0.95rem 1.5rem', borderRadius: '0.65rem', fontWeight: 700, textDecoration: 'none', border: '1px solid #475569' }}>{t.secondaryCta}</a>
         </div>
       </section>
 
