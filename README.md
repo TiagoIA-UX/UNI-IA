@@ -53,3 +53,32 @@ cd zairyx-blog
 npm install
 npm run dev
 ```
+
+## Deploy Vercel (anti-incidentes)
+
+### Root Directory correto
+- Projeto no Vercel deve apontar para `zairyx-blog`.
+- Se ficar em `./`, o build nao encontra o app Next.js.
+
+### Causa do erro mais comum
+- Erro: `Build Canceled` com mensagem `created with an unverified commit`.
+- Isso ocorre quando `Require Verified Commits` esta ativo no Vercel e o commit no `main` nao esta verificado.
+
+### Prevencao
+1. Manter `Require Verified Commits` desativado, ou
+2. Garantir que os commits no `main` sejam `Verified`.
+
+### Recuperacao rapida (quando bloquear)
+1. Criar branch de trigger e push:
+```bash
+git checkout -b deploy/verified-trigger
+git commit --allow-empty -m "chore: trigger deploy via github verified merge"
+git push -u origin deploy/verified-trigger
+```
+2. Abrir PR para `main` e fazer merge pelo GitHub (squash/merge).
+3. O commit gerado pelo GitHub tende a sair como `Verified`.
+4. O Vercel volta a aceitar o deploy automaticamente.
+
+### Validacao
+- Commit: verificar no GitHub se aparece `Verified`.
+- Vercel: status do contexto `Vercel` deve sair de `pending` para `success`.
