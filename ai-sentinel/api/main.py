@@ -89,8 +89,9 @@ def analyze_asset(asset: str):
         }
 
     except Exception as e:
-        print(f"[ERRO DO SISTEMA - SEM FALLBACK E SEM PLACEHOLDER] -> {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print(f"[ERRO DO SISTEMA - SEM FALLBACK E SEM PLACEHOLDER] -> {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Erro interno na análise. Verifique os logs do servidor.")
 
 
 @app.get("/api/copytrade/status")
@@ -158,7 +159,7 @@ def copytrade_execute(asset: str):
             "data": analysis,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
+        import traceback
+        print(f"[ERRO COPYTRADE] -> {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Erro interno na execução. Verifique os logs do servidor.")
     uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)

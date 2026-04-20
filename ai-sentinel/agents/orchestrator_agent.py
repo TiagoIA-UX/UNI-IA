@@ -48,6 +48,6 @@ class OrchestratorAgent:
                 asset=asset,
                 score=0.0,
                 classification="ERRO",
-                explanation=f"Falha na orquestração: {str(e)}\nRaw Response: {response[:100]}",
+                explanation=f"Falha na orquestração: {str(e)}\nRaw Response: {str(response)[:100]}",
                 sources=[]
             )
