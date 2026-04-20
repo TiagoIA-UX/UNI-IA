@@ -37,7 +37,7 @@ class OrchestratorAgent:
             # Tenta parsear a resposta do LLM para o objeto Pydantic
             # Como pedimos JSON estrito, o parse direto costuma funcionar bem
             import re
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            json_match = re.search(r'\{.*?\}', response, re.DOTALL)
             if json_match:
                 response_json = json.loads(json_match.group(0))
                 return OpportunityAlert(**response_json)

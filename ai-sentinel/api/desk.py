@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..core.schemas import OpportunityAlert
 
@@ -47,24 +47,25 @@ class PrivateDesk:
         normalized = (asset or "").upper()
         return normalized in allowed_assets
 
-    def _validate_alert(self, alert: OpportunityAlert, cfg: Dict[str, Any]):
+    def _check_alert(self, alert: OpportunityAlert, cfg: Dict[str, Any]) -> Optional[str]:
+        """Returns a block reason string if the alert should be blocked, or None if it passes."""
         if alert.classification != "OPORTUNIDADE":
-            raise RuntimeError(f"Mesa bloqueou execucao: classificacao nao elegivel ({alert.classification}).")
+            return f"Classificacao nao elegivel: {alert.classification}."
         if float(alert.score) < cfg["min_score"]:
-            raise RuntimeError(f"Mesa bloqueou execucao: score abaixo do minimo ({alert.score} < {cfg['min_score']}).")
+            return f"Score abaixo do minimo: {alert.score} < {cfg['min_score']}."
         if not self._is_asset_allowed(alert.asset, cfg["allowed_assets"]):
-            raise RuntimeError(f"Mesa bloqueou execucao: ativo fora da whitelist ({alert.asset}).")
+            return f"Ativo fora da whitelist: {alert.asset}."
+        return None
 
     def handle_alert(self, alert: OpportunityAlert) -> Dict[str, Any]:
         cfg = self._cfg()
-        try:
-            self._validate_alert(alert, cfg)
-        except RuntimeError as e:
+        block_reason = self._check_alert(alert, cfg)
+        if block_reason:
             return {
                 "success": False,
                 "mode": cfg["mode"],
                 "action": "blocked",
-                "message": str(e),
+                "message": block_reason,
             }
 
         # Paper mode nunca envia ordem real
