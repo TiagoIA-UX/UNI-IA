@@ -72,7 +72,12 @@ class UniIATelegramBot:
             
     def _format_message(self, alert: OpportunityAlert, is_premium: bool) -> str:
         """Formata o output segundo as boas práticas da plataforma com Markdown"""
-        badge = "🔴 RISCO" if alert.classification == "RISCO" else "🟢 OPORTUNIDADE"
+        if alert.classification == "RISCO":
+            badge = "🔴 RISCO"
+        elif alert.classification == "ATENÇÃO":
+            badge = "🟡 ATENÇÃO"
+        else:
+            badge = "🟢 OPORTUNIDADE"
         
         msg = f"⚡ *UNI IA Alerta* ⚡\n"
         msg += f"Ativo: *{alert.asset}*\n"

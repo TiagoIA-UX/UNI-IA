@@ -49,7 +49,7 @@ class PrivateDesk:
 
     def _validate_alert(self, alert: OpportunityAlert, cfg: Dict[str, Any]):
         if alert.classification != "OPORTUNIDADE":
-            raise RuntimeError("Mesa bloqueou execucao: apenas OPORTUNIDADE pode seguir para mesa.")
+            raise RuntimeError(f"Mesa bloqueou execucao: classificacao nao elegivel ({alert.classification}).")
         if float(alert.score) < cfg["min_score"]:
             raise RuntimeError(f"Mesa bloqueou execucao: score abaixo do minimo ({alert.score} < {cfg['min_score']}).")
         if not self._is_asset_allowed(alert.asset, cfg["allowed_assets"]):
@@ -57,7 +57,15 @@ class PrivateDesk:
 
     def handle_alert(self, alert: OpportunityAlert) -> Dict[str, Any]:
         cfg = self._cfg()
-        self._validate_alert(alert, cfg)
+        try:
+            self._validate_alert(alert, cfg)
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "mode": cfg["mode"],
+                "action": "blocked",
+                "message": str(e),
+            }
 
         # Paper mode nunca envia ordem real
         if cfg["mode"] != "live":

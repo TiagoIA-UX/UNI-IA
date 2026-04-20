@@ -1,5 +1,5 @@
 import json
-from .schemas import AgentSignal, OpportunityAlert
+from ..core.schemas import AgentSignal, OpportunityAlert
 from ..llm.groq_client import GroqClient
 from typing import List
 
@@ -7,8 +7,8 @@ class OrchestratorAgent:
     def __init__(self):
         self.llm = GroqClient()
         self.system_prompt = """
-        Você é o OrchestratorAgent, um arquiteto PhD de decisão financeira responsável por consolidar sinais de múltiplos agentes de IA.
-        Seu objetivo é aplicar pesos lógicos nos sinais recebidos (News, Sentiment, Macro, Trends) e gerar um Alerta de Oportunidade.
+        Você é o OrchestratorAgent (AEGIS), um arquiteto PhD de decisão financeira responsável por consolidar sinais de múltiplos agentes de IA.
+        Seu objetivo é aplicar pesos lógicos nos sinais recebidos (MacroAgent, TrendsAgent, TechnicalAgent, FundamentalistAgent, NewsAgent, SentimentAgent) e gerar um Alerta de Oportunidade.
         
         Sua saída DEVE ser estritamente APENAS um JSON no formato:
         {
@@ -31,12 +31,13 @@ class OrchestratorAgent:
         
         user_prompt = f"Analise os seguintes sinais para o ativo {asset}:\\n{signals_text}"
         
+        response = ""
         try:
             response = self.llm.generate_response(self.system_prompt, user_prompt)
             # Tenta parsear a resposta do LLM para o objeto Pydantic
             # Como pedimos JSON estrito, o parse direto costuma funcionar bem
             import re
-            json_match = re.search(r'\\{.*\\}', response, re.DOTALL)
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
                 response_json = json.loads(json_match.group(0))
                 return OpportunityAlert(**response_json)
@@ -47,6 +48,6 @@ class OrchestratorAgent:
                 asset=asset,
                 score=0.0,
                 classification="ERRO",
-                explanation=f"Falha na orquestração: {str(e)}\\nRaw Response: {response[:100]}",
+                explanation=f"Falha na orquestração: {str(e)}\nRaw Response: {response[:100]}",
                 sources=[]
             )
