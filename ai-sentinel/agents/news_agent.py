@@ -3,8 +3,9 @@ import re
 import urllib.parse
 import requests
 from bs4 import BeautifulSoup
-from ..core.schemas import AgentSignal
-from ..llm.groq_client import GroqClient
+from core.schemas import AgentSignal
+from llm.groq_client import GroqClient
+from llm.json_utils import extract_json_object
 
 class NewsAgent:
     def __init__(self):
@@ -44,11 +45,7 @@ class NewsAgent:
         response = self.llm.generate_response(self.system_prompt, prompt)
         
         # Extrai JSON sem placeholders
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if not json_match:
-            raise ValueError(f"O Groq não retornou um JSON válido. Resposta: {response}")
-            
-        data = json.loads(json_match.group(0))
+        data = extract_json_object(response)
         
         return AgentSignal(
             agent_name="NewsAgent",

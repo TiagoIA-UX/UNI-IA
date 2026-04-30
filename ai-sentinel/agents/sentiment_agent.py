@@ -1,7 +1,8 @@
 import json
 import re
-from ..core.schemas import AgentSignal
-from ..llm.groq_client import GroqClient
+from core.schemas import AgentSignal
+from llm.groq_client import GroqClient
+from llm.json_utils import extract_json_object
 
 class SentimentAgent:
     def __init__(self):
@@ -22,11 +23,7 @@ class SentimentAgent:
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if not json_match:
-            raise ValueError(f"O Groq não retornou JSON válido em SentimentAgent. Resposta: {response}")
-            
-        data = json.loads(json_match.group(0))
+        data = extract_json_object(response)
         
         return AgentSignal(
             agent_name="SentimentAgent",

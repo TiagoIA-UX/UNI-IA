@@ -1,17 +1,18 @@
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from .telegram_bot import UniIATelegramBot
-from .copy_trade import CopyTradeService
-from .desk import PrivateDesk
-from ..agents.news_agent import NewsAgent
-from ..agents.sentiment_agent import SentimentAgent
-from ..agents.macro_agent import MacroAgent
-from ..agents.trends_agent import TrendsAgent
-from ..agents.technical_agent import TechnicalAgent
-from ..agents.fundamentalist_agent import FundamentalistAgent
-from ..agents.position_monitor_agent import PositionMonitorAgent
-from ..agents.orchestrator_agent import OrchestratorAgent
+from dotenv import load_dotenv
+from api.analysis_service import AnalysisService
+from api.audit_service import AuditService
+from api.telegram_bot import UniIATelegramBot
+from api.telegram_control import TelegramControlService
+from api.copy_trade import CopyTradeService
+from api.desk import PrivateDesk
+from api.signal_scanner import SignalScanner
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env.local")
 
 app = FastAPI(
     title="UNI IA",
@@ -28,66 +29,64 @@ app.add_middleware(
 )
 
 telegram_bot = UniIATelegramBot()
+audit_service = AuditService()
 copy_trade_service = CopyTradeService()
-private_desk = PrivateDesk(copy_trade_service)
+private_desk = PrivateDesk(copy_trade_service, audit_service)
+analysis_service = AnalysisService()
+signal_scanner = SignalScanner(analysis_service, telegram_bot, private_desk, audit_service)
+telegram_control = TelegramControlService(telegram_bot, private_desk, signal_scanner, copy_trade_service)
+
+
+def analyze_asset_pipeline(asset: str):
+    alert = analysis_service.analyze(asset)
+    desk_preview = private_desk.preview_action(alert)
+
+    try:
+        audit_service.log_event(
+            "signal.analysis_api",
+            "success",
+            asset=alert.asset,
+            classification=alert.classification,
+            score=float(alert.score),
+            details={"strategy": alert.strategy.dict() if alert.strategy else None, "sources": alert.sources},
+        )
+    except Exception as audit_error:
+        print(f"[AUDIT][WARN] signal.analysis_api: {audit_error}")
+
+    telegram_result = {"success": True, "dispatched": True}
+    try:
+        telegram_bot.dispatch_alert(alert, operational_context=desk_preview)
+    except Exception as telegram_error:
+        telegram_result = {
+            "success": False,
+            "dispatched": False,
+            "error": str(telegram_error),
+        }
+
+    desk_result = private_desk.handle_alert(alert)
+    return {
+        "success": True,
+        "data": alert.dict(),
+        "telegram": telegram_result,
+        "desk": desk_result,
+    }
+
+
+@app.on_event("startup")
+def startup_signal_scanner():
+    signal_scanner.start()
+    telegram_control.start()
+
+
+@app.on_event("shutdown")
+def shutdown_signal_scanner():
+    signal_scanner.stop()
+    telegram_control.stop()
 
 @app.post("/api/analyze/{asset}")
 def analyze_asset(asset: str):
     try:
-        print(f"[{asset}] INICIANDO VARREDURA PROFUNDA UNI IA...")
-        
-        agents_data = []
-
-        # 1. MacroAgent
-        macro = MacroAgent().analyze_macro_context(asset)
-        agents_data.append(macro)
-        print(f"[{asset}] Macro OK: {macro.signal_type}")
-        
-        # 2. TrendsAgent
-        trends = TrendsAgent().analyze_trends(asset)
-        agents_data.append(trends)
-        print(f"[{asset}] Trends OK: {trends.signal_type}")
-
-        # 3. TechnicalAgent (Múltiplos Tempos Gráficos)
-        tech = TechnicalAgent().analyze_technical(asset)
-        agents_data.append(tech)
-        print(f"[{asset}] Technical (Multi-TF) OK: {tech.signal_type}")
-
-        # 4. FundamentalistAgent (Dados Financeiros Históricos da Base de Valores)
-        fund = FundamentalistAgent().analyze_fundamentals(asset)
-        agents_data.append(fund)
-        print(f"[{asset}] Funamentalist OK: {fund.signal_type}")
-
-        # 5. NewsAgent & SentimentAgent 
-        news = NewsAgent().analyze_news(asset)
-        agents_data.append(news)
-        print(f"[{asset}] News OK: {news.signal_type}")
-
-        senti = SentimentAgent().analyze_sentiment(asset, news.raw_data)
-        agents_data.append(senti)
-        print(f"[{asset}] Sentiment/Psico OK: {senti.signal_type}")
-
-        # 6. Orchestrator Mestre Ph.D
-        orchestrator = OrchestratorAgent()
-        alert = orchestrator.analyze_signals(asset, agents_data)
-        
-        # 7. Monitor Guardião: Usuários em Operação Aberta
-        guard = PositionMonitorAgent().verify_reversal_risk(alert)
-        if guard.get("is_reversal_alert"):
-            alert.position_reversal_alert = guard.get("reversal_message")
-            print(f"[{asset}] 🔥 ALERTA DE REVERSÃO DE POSIÇÃO ATIVADO!")
-
-        # Disparo Telegram Bot da UNI IA
-        telegram_bot.dispatch_alert(alert)
-
-        desk_result = private_desk.handle_alert(alert)
-        
-        return {
-            "success": True,
-            "data": alert.dict(),
-            "desk": desk_result,
-        }
-
+        return analyze_asset_pipeline(asset)
     except Exception as e:
         print(f"[ERRO DO SISTEMA - SEM FALLBACK E SEM PLACEHOLDER] -> {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -110,6 +109,61 @@ def desk_status():
         return {
             "success": True,
             "data": private_desk.status(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/signals/status")
+def signals_status():
+    try:
+        return {
+            "success": True,
+            "data": signal_scanner.status(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/telegram/status")
+def telegram_status():
+    try:
+        return {
+            "success": True,
+            "data": telegram_control.status(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/signals/start")
+def signals_start():
+    try:
+        return {
+            "success": True,
+            "data": signal_scanner.start(force=True),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/signals/stop")
+def signals_stop():
+    try:
+        return {
+            "success": True,
+            "data": signal_scanner.stop(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/signals/run-cycle")
+def signals_run_cycle():
+    try:
+        return {
+            "success": True,
+            "data": signal_scanner.run_cycle(),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

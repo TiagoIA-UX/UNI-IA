@@ -1,8 +1,8 @@
 import os
 import time
-from typing import Dict
+from typing import Dict, Optional
 import requests
-from ..core.schemas import OpportunityAlert
+from core.schemas import OpportunityAlert
 
 class UniIATelegramBot:
     def __init__(self):
@@ -51,8 +51,13 @@ class UniIATelegramBot:
                 if attempt < self.max_retries:
                     time.sleep(attempt * 0.4)
         raise RuntimeError(f"Falha no envio Telegram apos {self.max_retries} tentativas: {last_err}")
+
+    def send_admin_message(self, chat_id: str, message: str):
+        if not self.bot_token:
+            raise RuntimeError("TELEGRAM_BOT_TOKEN nao configurado para comandos administrativos.")
+        self._post_message(self.bot_token, chat_id, message)
         
-    def dispatch_alert(self, alert: OpportunityAlert):
+    def dispatch_alert(self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None):
         """
         Método central do robô UNI IA.
         Decide o destino do sinal baseado nas regras de negócio (Free vs Premium).
@@ -61,40 +66,81 @@ class UniIATelegramBot:
         self._validate_config()
 
         # Premium para ativos com USD/EUR/BRL no par.
-        premium_assets = ["USD", "EUR", "BRL"]
+        premium_assets = ["USD", "EUR", "BRL", "BTC", "ETH", "SOL"]
         normalized_asset = (alert.asset or "").upper()
         is_premium_asset = any(code in normalized_asset for code in premium_assets)
         
         if is_premium_asset:
-            self._send_to_premium(alert)
+            self._send_to_premium(alert, operational_context)
         else:
-            self._send_to_free(alert)
+            self._send_to_free(alert, operational_context)
             
-    def _format_message(self, alert: OpportunityAlert, is_premium: bool) -> str:
+    def _format_message(self, alert: OpportunityAlert, is_premium: bool, operational_context: Optional[Dict[str, str]] = None) -> str:
         """Formata o output segundo as boas práticas da plataforma com Markdown"""
-        badge = "🔴 RISCO" if alert.classification == "RISCO" else "🟢 OPORTUNIDADE"
-        
-        msg = f"⚡ *UNI IA Alerta* ⚡\n"
-        msg += f"Ativo: *{alert.asset}*\n"
-        msg += f"Status: {badge} (Score: {alert.score}/100)\n\n"
-        msg += f"🧠 *Insight:* {alert.explanation}\n"
-        
+        classification_badges = {
+            "RISCO": "🔴 RISCO",
+            "ATENÇÃO": "🟠 ATENCAO",
+            "OPORTUNIDADE": "🟢 OPORTUNIDADE",
+        }
+        badge = classification_badges.get(alert.classification, f"⚪ {alert.classification}")
+        strategy = alert.strategy
+        direction = strategy.direction.upper() if strategy and strategy.direction else "FLAT"
+        timeframe = strategy.timeframe if strategy and strategy.timeframe else "N/D"
+        mode = strategy.mode.upper() if strategy and strategy.mode else "ANALYTICS"
+        operational_status = "monitorando"
+        if operational_context and operational_context.get("operational_status"):
+            operational_status = operational_context["operational_status"]
+        elif strategy and strategy.operational_status:
+            operational_status = strategy.operational_status
+
+        direction_badges = {
+            "LONG": "🟢 LONG",
+            "SHORT": "🔴 SHORT",
+            "FLAT": "⚪ FLAT",
+        }
+        direction_label = direction_badges.get(direction, direction)
+
+        lines = [
+            "⚡ *UNI IA Signal Desk*",
+            f"Ativo: *{alert.asset}*",
+            f"Direcao: *{direction_label}*",
+            f"Timeframe: *{timeframe}*",
+            f"Modo: *{mode}*",
+            f"Status: *{badge}*",
+            f"Score: *{alert.score:.1f}/100*",
+            f"Operacional: *{operational_status}*",
+        ]
+
+        if strategy and strategy.execution_hint:
+            lines.append(f"Execucao: {strategy.execution_hint}")
+
+        lines.append("")
+        lines.append(f"🧠 *Leitura:* {alert.explanation}")
+
+        if strategy and strategy.reasons:
+            lines.append("")
+            lines.append("📊 *Confluencias:*")
+            for reason in strategy.reasons:
+                lines.append(f"- {reason}")
+
         if is_premium:
-            msg += f"\n💎 *Exclusivo UNI IA Premium*"
+            lines.append("")
+            lines.append("💎 *Fluxo Premium Ativado*")
         
         if alert.position_reversal_alert:
-            msg += f"\n\n🚨 *ALARME DE POSIÇÃO/REVERSÃO*: {alert.position_reversal_alert} 🚨"
-            
-        return msg
+            lines.append("")
+            lines.append(f"🚨 *REVERSAO:* {alert.position_reversal_alert}")
 
-    def _send_to_free(self, alert: OpportunityAlert):
+        return "\n".join(lines)
+
+    def _send_to_free(self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None):
         """Envia para o canal Free"""
-        msg = self._format_message(alert, is_premium=False)
+        msg = self._format_message(alert, is_premium=False, operational_context=operational_context)
         self._post_message(self.free_bot_token, self.free_channel_id, msg)
         print("Alerta enviado para Telegram [FREE]")
         
-    def _send_to_premium(self, alert: OpportunityAlert):
+    def _send_to_premium(self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None):
         """Envia para o canal Premium (Dólar/Euro/Real)"""
-        msg = self._format_message(alert, is_premium=True)
+        msg = self._format_message(alert, is_premium=True, operational_context=operational_context)
         self._post_message(self.premium_bot_token, self.premium_channel_id, msg)
         print("Alerta enviado para Telegram [PREMIUM]")

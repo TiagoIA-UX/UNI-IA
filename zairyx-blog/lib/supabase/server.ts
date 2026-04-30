@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/supabase/env'
 
 /**
  * Zairyx IA | Server Supabase
@@ -10,24 +11,19 @@ export async function createClient() {
   const cookieStore = await cookies()
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabaseUrl(),
+    getSupabasePublishableKey(),
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        getAll() {
+          return cookieStore.getAll()
         },
-        set(name: string, value: string, options: CookieOptions) {
+        setAll(cookiesToSet) {
           try {
-            cookieStore.set({ name, value, ...options })
-          } catch (error) {
-            // Pode ser chamado de Server Components on render
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options })
-          } catch (error) {
+            cookiesToSet.forEach(({ name, value, options }: { name: string; value: string; options: CookieOptions }) => {
+              cookieStore.set({ name, value, ...options })
+            })
+          } catch {
             // Pode ser chamado de Server Components on render
           }
         },

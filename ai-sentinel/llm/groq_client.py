@@ -1,8 +1,9 @@
 import os
+from pathlib import Path
 from groq import Groq
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / ".env.local")
 
 class GroqClient:
     def __init__(self):
@@ -11,7 +12,7 @@ class GroqClient:
         if not self.api_key:
             print("Aviso: GROQ_API_KEY não encontrada no ambiente.")
         self.client = Groq(api_key=self.api_key)
-        self.model = "llama3-8b-8192" # Modelo rápido e gratuito ideal para agentes
+        self.model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
         
     def generate_response(self, system_prompt: str, user_prompt: str) -> str:
         """Gera uma resposta baseada na API do Groq."""

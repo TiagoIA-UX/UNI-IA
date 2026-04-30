@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { homeCopy, resolveLocale, riskCopy } from '@/lib/i18n';
 
@@ -211,20 +212,32 @@ export default function PlanosPage() {
       <section className="relative overflow-hidden rounded-3xl border border-cyan-400/25 bg-gradient-to-br from-slate-900 via-slate-950 to-cyan-950/30 px-6 py-10 md:px-10 md:py-14">
         <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
         <div className="absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl" />
-        <div className="relative">
-          <p className="inline-flex rounded-full border border-cyan-300/40 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-cyan-200">
-            {salesCopy.heroKicker}
-          </p>
-          <h1 className="mt-4 text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
-            {heroTitle}
-          </h1>
-          <p className="mt-5 max-w-3xl text-slate-300 text-lg leading-relaxed">
-            {salesCopy.heroSub}
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3 text-sm">
-            <span className="rounded-full bg-slate-800/70 px-3 py-1 text-cyan-200">{salesCopy.trust1}</span>
-            <span className="rounded-full bg-slate-800/70 px-3 py-1 text-cyan-200">{salesCopy.trust2}</span>
-            <span className="rounded-full bg-slate-800/70 px-3 py-1 text-cyan-200">{salesCopy.trust3}</span>
+        <div className="relative grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div>
+            <p className="inline-flex rounded-full border border-cyan-300/40 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-cyan-200">
+              {salesCopy.heroKicker}
+            </p>
+            <h1 className="mt-4 text-4xl font-extrabold tracking-tight leading-tight md:text-6xl">
+              {heroTitle}
+            </h1>
+            <p className="mt-5 max-w-3xl text-lg leading-relaxed text-slate-300">
+              {salesCopy.heroSub}
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3 text-sm">
+              <span className="rounded-full bg-slate-800/70 px-3 py-1 text-cyan-200">{salesCopy.trust1}</span>
+              <span className="rounded-full bg-slate-800/70 px-3 py-1 text-cyan-200">{salesCopy.trust2}</span>
+              <span className="rounded-full bg-slate-800/70 px-3 py-1 text-cyan-200">{salesCopy.trust3}</span>
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950/70 shadow-2xl shadow-cyan-500/10">
+            <Image
+              src="/trading-desk-hero.svg"
+              alt="Visual da mesa premium da UNI IA"
+              width={1200}
+              height={900}
+              priority
+              className="block h-auto w-full"
+            />
           </div>
         </div>
       </section>

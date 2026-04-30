@@ -1,5 +1,6 @@
-from ..core.schemas import OpportunityAlert
-from ..llm.groq_client import GroqClient
+from core.schemas import OpportunityAlert
+from llm.groq_client import GroqClient
+from llm.json_utils import extract_json_object
 import json
 import re
 
@@ -26,8 +27,7 @@ class PositionMonitorAgent:
 
         response = self.llm.generate_response(self.system_prompt, prompt)
         
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if not json_match:
+        try:
+            return extract_json_object(response)
+        except ValueError:
             return {"is_reversal_alert": False, "reversal_message": ""}
-            
-        return json.loads(json_match.group(0))

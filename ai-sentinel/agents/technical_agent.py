@@ -1,8 +1,10 @@
 import json
 import re
 import yfinance as yf
-from ..core.schemas import AgentSignal
-from ..llm.groq_client import GroqClient
+from agents.market_utils import resolve_market_ticker
+from core.schemas import AgentSignal
+from llm.groq_client import GroqClient
+from llm.json_utils import extract_json_object
 
 class TechnicalAgent:
     def __init__(self):
@@ -20,13 +22,7 @@ class TechnicalAgent:
         """
         
     def _get_ticker(self, asset: str) -> str:
-        asset = asset.upper().strip()
-        if asset == "USD": return "USDBRL=X"
-        if asset == "EUR": return "EURBRL=X"
-        if asset == "BRL": return "^BVSP"
-        if not asset.endswith(".SA") and not asset.endswith("=X") and not asset.startswith("^"):
-            return f"{asset}.SA"
-        return asset
+        return resolve_market_ticker(asset)
 
     def fetch_multi_timeframe_data(self, asset: str) -> str:
         ticker_str = self._get_ticker(asset)
@@ -57,11 +53,7 @@ class TechnicalAgent:
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if not json_match:
-            raise ValueError(f"Groq falhou no TechnicalAgent. Raw: {response}")
-            
-        data = json.loads(json_match.group(0))
+        data = extract_json_object(response)
         
         return AgentSignal(
             agent_name="TechnicalAgent",

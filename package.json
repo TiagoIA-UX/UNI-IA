@@ -1,0 +1,11 @@
+{
+  "name": "uni-ia-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix zairyx-blog run dev",
+    "dev:web": "npm --prefix zairyx-blog run dev",
+    "build": "npm --prefix zairyx-blog run build",
+    "start": "npm --prefix zairyx-blog run start",
+    "dev:api": "python ai-sentinel/run_local_api.py"
+  }
+}

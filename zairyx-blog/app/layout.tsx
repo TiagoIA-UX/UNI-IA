@@ -3,6 +3,8 @@ import { Suspense } from 'react'
 import Image from 'next/image'
 import LanguageSwitcher from '@/app/components/language-switcher'
 import NavLinks from '@/app/components/nav-links'
+import { isAllowedPlatformEmail } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = {
   title: 'UNI IA - Institutional AI Signals',
@@ -10,7 +12,12 @@ export const metadata: Metadata = {
   keywords: 'uni ia, ai trading signals, forex ai, premium telegram signals, market intelligence',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient()
+  const { data } = await supabase.auth.getUser()
+  const user = data.user
+  const hasPlatformAccess = isAllowedPlatformEmail(user?.email)
+
   return (
     <html lang='en' className='scroll-smooth antialiased'>
       <body style={{ margin: 0, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica Neue, sans-serif', background: 'radial-gradient(circle at 10% 10%, #1f2937 0%, #020617 35%, #030712 100%)', color: '#f8fafc', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -29,6 +36,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Suspense fallback={null}>
                 <NavLinks variant='header' />
               </Suspense>
+              {hasPlatformAccess ? (
+                <a href='/plataforma' style={{ background: 'linear-gradient(120deg, #f59e0b, #22d3ee)', color: '#0f172a', padding: '0.45rem 1rem', borderRadius: '9999px', textDecoration: 'none', boxShadow: '0 6px 18px rgba(34,211,238,0.24)' }}>
+                  Plataforma
+                </a>
+              ) : (
+                <a href='/login' style={{ background: '#f8fafc', color: '#0f172a', padding: '0.45rem 1rem', borderRadius: '9999px', textDecoration: 'none', boxShadow: '0 6px 18px rgba(248,250,252,0.18)' }}>
+                  Login Google
+                </a>
+              )}
+              {user?.email ? (
+                <a href='/auth/signout' style={{ border: '1px solid rgba(148,163,184,0.4)', color: '#e2e8f0', padding: '0.45rem 1rem', borderRadius: '9999px', textDecoration: 'none' }}>
+                  Sair
+                </a>
+              ) : null}
               <a href='https://t.me/uni_ia_free_bot' target='_blank' rel='noreferrer' style={{ background: '#0ea5e9', color: '#fff', padding: '0.45rem 1rem', borderRadius: '9999px', textDecoration: 'none', boxShadow: '0 6px 18px rgba(14,165,233,0.35)' }}>Free Telegram</a>
               <Suspense fallback={null}>
                 <LanguageSwitcher />

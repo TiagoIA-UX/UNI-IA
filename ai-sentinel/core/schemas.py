@@ -10,6 +10,16 @@ class AgentSignal(BaseModel):
     summary: str
     raw_data: Optional[str] = None
 
+
+class StrategyDecision(BaseModel):
+    mode: str
+    direction: str
+    timeframe: str
+    confidence: float
+    operational_status: str
+    reasons: List[str]
+    execution_hint: Optional[str] = None
+
 class OpportunityAlert(BaseModel):
     """Alerta final consolidado pelo OrchestratorAgent"""
     asset: str
@@ -18,3 +28,4 @@ class OpportunityAlert(BaseModel):
     explanation: str
     sources: List[str]
     position_reversal_alert: Optional[str] = None # Alerta de proteção de posições abertas
+    strategy: Optional[StrategyDecision] = None

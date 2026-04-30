@@ -1,8 +1,10 @@
 import json
 import re
 import yfinance as yf
-from ..core.schemas import AgentSignal
-from ..llm.groq_client import GroqClient
+from agents.market_utils import resolve_market_ticker
+from core.schemas import AgentSignal
+from llm.groq_client import GroqClient
+from llm.json_utils import extract_json_object
 
 class FundamentalistAgent:
     def __init__(self):
@@ -21,10 +23,10 @@ class FundamentalistAgent:
     def fetch_fundamentals(self, asset: str) -> str:
         # Moedas não têm fundamentos tradicionais de ações, então filtramos
         asset_upper = asset.upper().strip()
-        if asset_upper in ["USD", "EUR"]:
+        if asset_upper in ["USD", "EUR"] or asset_upper.endswith("USDT") or (len(asset_upper) == 6 and asset_upper.isalpha()):
             return f"Ativo cambial ({asset}). A análise fundamentalista dele se baseia na balança comercial e diferencial de juros (já coberto pelo MacroAgent)."
-            
-        ticker_str = f"{asset_upper}.SA" if not asset_upper.endswith(".SA") and not asset_upper.startswith("^") else asset_upper
+
+        ticker_str = resolve_market_ticker(asset_upper)
         ticker = yf.Ticker(ticker_str)
         info = ticker.info
         
@@ -45,11 +47,7 @@ class FundamentalistAgent:
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if not json_match:
-            raise ValueError(f"Groq falhou no FundamentalistAgent. Raw: {response}")
-            
-        data = json.loads(json_match.group(0))
+        data = extract_json_object(response)
         
         return AgentSignal(
             agent_name="FundamentalistAgent",

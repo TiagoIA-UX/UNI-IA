@@ -1,0 +1,6 @@
+# Parâmetros estratégicos do Orquestrador Uni-IA
+pGap: 5.0
+pEntrada: 1.0
+pStop: 1.5
+pHLimiteEntrada: '12:00'
+pHFinal: '16:30'

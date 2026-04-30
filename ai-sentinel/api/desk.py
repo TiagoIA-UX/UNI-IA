@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List
 
-from ..core.schemas import OpportunityAlert
+from core.schemas import OpportunityAlert
 
 
 class PrivateDesk:
@@ -16,9 +16,18 @@ class PrivateDesk:
     - aprovacao manual opcional antes de enviar para copy trade
     """
 
-    def __init__(self, copy_trade_service):
+    def __init__(self, copy_trade_service, audit_service=None):
         self.copy_trade_service = copy_trade_service
+        self.audit_service = audit_service
         self.pending_requests: Dict[str, Dict[str, Any]] = {}
+
+    def _audit(self, event_type: str, status: str, **payload):
+        if not self.audit_service:
+            return
+        try:
+            self.audit_service.log_event(event_type, status, **payload)
+        except Exception as err:
+            print(f"[AUDIT][WARN] {event_type}: {err}")
 
     def _cfg(self) -> Dict[str, Any]:
         allowed_raw = os.getenv("DESK_ALLOWED_ASSETS", "")
@@ -36,6 +45,37 @@ class PrivateDesk:
             "desk": cfg,
             "copy_trade": self.copy_trade_service.status(),
             "pending_count": len(self.pending_requests),
+        }
+
+    def preview_action(self, alert: OpportunityAlert) -> Dict[str, Any]:
+        cfg = self._cfg()
+        try:
+            self._validate_alert(alert, cfg)
+        except Exception as err:
+            return {
+                "mode": cfg["mode"],
+                "action": "blocked",
+                "operational_status": str(err),
+            }
+
+        if cfg["mode"] != "live":
+            return {
+                "mode": cfg["mode"],
+                "action": "paper_logged",
+                "operational_status": "paper_mode",
+            }
+
+        if cfg["manual_approval"]:
+            return {
+                "mode": cfg["mode"],
+                "action": "pending_approval",
+                "operational_status": "aguardando_aprovacao_manual",
+            }
+
+        return {
+            "mode": cfg["mode"],
+            "action": "executed",
+            "operational_status": "execucao_automatica_habilitada",
         }
 
     def list_pending(self) -> List[Dict[str, Any]]:
@@ -61,6 +101,14 @@ class PrivateDesk:
 
         # Paper mode nunca envia ordem real
         if cfg["mode"] != "live":
+            self._audit(
+                "desk.paper_logged",
+                "success",
+                asset=alert.asset,
+                classification=alert.classification,
+                score=float(alert.score),
+                details={"mode": cfg["mode"], "strategy": alert.strategy.dict() if alert.strategy else None},
+            )
             return {
                 "success": True,
                 "mode": cfg["mode"],
@@ -80,6 +128,15 @@ class PrivateDesk:
                 "alert": alert.dict(),
                 "status": "pending_approval",
             }
+            self._audit(
+                "desk.pending_approval",
+                "pending",
+                asset=alert.asset,
+                request_id=request_id,
+                classification=alert.classification,
+                score=float(alert.score),
+                details={"mode": cfg["mode"], "strategy": alert.strategy.dict() if alert.strategy else None},
+            )
             return {
                 "success": True,
                 "mode": cfg["mode"],
@@ -90,6 +147,14 @@ class PrivateDesk:
 
         # Live sem aprovacao manual: executa direto no copy trade
         result = self.copy_trade_service.execute_from_alert(alert)
+        self._audit(
+            "desk.executed",
+            "success",
+            asset=alert.asset,
+            classification=alert.classification,
+            score=float(alert.score),
+            details={"mode": cfg["mode"], "execution": result, "strategy": alert.strategy.dict() if alert.strategy else None},
+        )
         return {
             "success": True,
             "mode": cfg["mode"],
@@ -110,6 +175,15 @@ class PrivateDesk:
         req["status"] = "executed"
         req["executed_at"] = datetime.utcnow().isoformat() + "Z"
         req["execution"] = result
+        self._audit(
+            "desk.approved_execution",
+            "success",
+            asset=alert.asset,
+            request_id=request_id,
+            classification=alert.classification,
+            score=float(alert.score),
+            details={"execution": result, "strategy": alert.strategy.dict() if alert.strategy else None},
+        )
 
         return {
             "success": True,
@@ -125,6 +199,15 @@ class PrivateDesk:
         req["status"] = "rejected"
         req["rejected_at"] = datetime.utcnow().isoformat() + "Z"
         req["reason"] = reason
+        self._audit(
+            "desk.rejected",
+            "rejected",
+            asset=req.get("asset"),
+            request_id=request_id,
+            classification=req.get("classification"),
+            score=float(req.get("score", 0)),
+            details={"reason": reason},
+        )
         return {
             "success": True,
             "request_id": request_id,

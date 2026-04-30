@@ -20,15 +20,37 @@ Endpoints em `ai-sentinel/api/main.py`:
 - `GET /api/desk/pending`: fila de aprovacao manual.
 - `POST /api/desk/approve/{request_id}`: aprova e executa em live.
 - `POST /api/desk/reject/{request_id}`: rejeita request pendente.
+- `GET /api/signals/status`: status do scanner continuo de sinais.
+- `POST /api/signals/start`: inicia o scanner continuo.
+- `POST /api/signals/stop`: interrompe o scanner continuo.
+- `POST /api/signals/run-cycle`: executa uma rodada imediata de varredura.
+- `GET /api/telegram/status`: status do polling administrativo do Telegram.
+
+## Auditoria operacional
+- Migration dedicada em `supabase/migrations/004_uni_ia_operational_audit.sql`.
+- Eventos persistidos: geracao de sinal, paper log, pendencia, execucao aprovada, execucao automatica e rejeicao.
+- Persistencia feita pelo backend Python via REST Admin do Supabase usando `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Variaveis obrigatorias (execucao real)
 No `.env.local`:
 - `TELEGRAM_BOT_TOKEN` ou `TELEGRAM_FREE_BOT_TOKEN` e `TELEGRAM_PREMIUM_BOT_TOKEN`
 - `TELEGRAM_FREE_CHANNEL`
 - `TELEGRAM_PREMIUM_CHANNEL`
+- `TELEGRAM_CONTROL_ENABLED=true` para ativar comandos administrativos por polling
+- `TELEGRAM_ADMIN_CHAT_IDS=123456789`
+- `TELEGRAM_ADMIN_USER_IDS=123456789`
+- `SIGNAL_SCANNER_ENABLED=true` para varredura automatica
+- `SIGNAL_SCAN_ASSETS=BTCUSDT,ETHUSDT,SOLUSDT`
+- `SIGNAL_SCAN_INTERVAL_SECONDS=60`
+- `SIGNAL_SCAN_STAGGER_SECONDS=2`
+- `SIGNAL_MIN_SCORE=75`
+- `SIGNAL_ALLOWED_CLASSIFICATIONS=OPORTUNIDADE`
+- `SIGNAL_DEDUPE_TTL_SECONDS=300`
+- `STRATEGY_DEFAULT_MODE=swing`
 - `BROKER_API_BASE_URL`
 - `BROKER_API_KEY`
-- `BROKER_ACCOUNT_ID`
+- `BROKER_API_SECRET` (Bybit)
+- `BROKER_ACCOUNT_ID` (apenas para adapter HTTP generico, nao para Bybit)
 - `COPY_TRADE_ENABLED=true` (somente apos homologacao)
 - `DESK_MODE=live`
 - `DESK_REQUIRE_MANUAL_APPROVAL=true`
@@ -44,8 +66,15 @@ No `.env.local`:
 ```bash
 cd ai-sentinel
 pip install -r requirements.txt
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+python run_local_api.py
 ```
+
+Observacao:
+- O launcher `run_local_api.py` usa `h11` e desabilita WebSocket para evitar dependencias quebradas do ambiente local do Windows.
+- Em `live`, a mesa continua exigindo aprovacao manual quando `DESK_REQUIRE_MANUAL_APPROVAL=true`.
+- Para automacao continua, habilite `SIGNAL_SCANNER_ENABLED=true` e defina a lista de ativos em `SIGNAL_SCAN_ASSETS`.
+- Comandos suportados no Telegram administrativo: `/status`, `/pending`, `/approve <request_id>`, `/reject <request_id> [motivo]`, `/cycle`.
+- Para descobrir `TELEGRAM_ADMIN_CHAT_IDS` ou `TELEGRAM_ADMIN_USER_IDS`, envie uma mensagem para o bot `@uni_ia_bot` e depois consulte `/api/telegram/status` para ler `last_seen_chat_id` e `last_seen_user_id`.
 
 ### Frontend (zairyx-blog)
 ```bash

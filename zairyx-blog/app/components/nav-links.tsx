@@ -44,6 +44,12 @@ export default function NavLinks({ variant }: NavLinksProps) {
       <a href={linkFor('/')} style={{ color: pathname === '/' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
         Home
       </a>
+      <a href={linkFor('/acesso')} style={{ color: pathname === '/acesso' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+        Access
+      </a>
+      <a href={linkFor('/plataforma')} style={{ color: pathname === '/plataforma' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+        Platform
+      </a>
       <a href={linkFor('/planos')} style={{ color: pathname === '/planos' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
         Pricing
       </a>

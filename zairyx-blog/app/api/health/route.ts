@@ -8,10 +8,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export async function GET() {
   try {
     const supabase = createAdminClient();
-    
-    // Quick DB Ping
+
+    // Quick DB ping against the active analytics table used in production.
     const start = performance.now();
-    const { error } = await supabase.from('zairyx_users').select('id').limit(1).maybeSingle();
+    const { error } = await supabase.from('uni_ia_events').select('id').limit(1).maybeSingle();
     const dbLatency = performance.now() - start;
 
     if (error && error.code !== 'PGRST116') {

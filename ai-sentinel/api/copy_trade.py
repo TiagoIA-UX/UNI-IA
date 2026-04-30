@@ -5,7 +5,7 @@ import time
 import hashlib
 from typing import Dict, Any
 import requests
-from ..core.schemas import OpportunityAlert
+from core.schemas import OpportunityAlert
 
 
 class GenericBrokerAdapter:
@@ -24,6 +24,16 @@ class GenericBrokerAdapter:
 
     def is_ready(self) -> bool:
         return bool(self.base_url and self.api_key and self.account_id)
+
+    def missing_config(self):
+        missing = []
+        if not self.base_url:
+            missing.append("BROKER_API_BASE_URL")
+        if not self.api_key:
+            missing.append("BROKER_API_KEY")
+        if not self.account_id:
+            missing.append("BROKER_ACCOUNT_ID")
+        return missing
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -61,10 +71,12 @@ class CopyTradeService:
         return GenericBrokerAdapter()
 
     def status(self) -> Dict[str, Any]:
+        missing = self.adapter.missing_config()
         return {
             "enabled": self.enabled,
             "provider": self.provider,
-            "broker_ready": self.adapter.is_ready(),
+            "broker_ready": len(missing) == 0,
+            "missing_config": missing,
             "min_confidence": self.min_confidence,
             "max_risk_percent": self.max_risk_percent,
         }
@@ -82,10 +94,11 @@ class CopyTradeService:
     def execute_from_alert(self, alert: OpportunityAlert) -> Dict[str, Any]:
         self._validate_signal_for_copytrade(alert)
 
+        strategy_direction = ((alert.strategy.direction if alert.strategy else "") or "").lower()
         explanation = (alert.explanation or "").upper()
-        if "VENDA" in explanation or "SELL" in explanation:
+        if strategy_direction == "short" or "VENDA" in explanation or "SELL" in explanation:
             side = "SELL"
-        elif "COMPRA" in explanation or "BUY" in explanation:
+        elif strategy_direction == "long" or "COMPRA" in explanation or "BUY" in explanation:
             side = "BUY"
         else:
             raise RuntimeError("Copy trade bloqueado: direcao da ordem nao identificada com seguranca no sinal.")
@@ -99,6 +112,8 @@ class CopyTradeService:
                 "classification": alert.classification,
                 "score": alert.score,
                 "sources": alert.sources,
+                "strategy_mode": alert.strategy.mode if alert.strategy else None,
+                "strategy_timeframe": alert.strategy.timeframe if alert.strategy else None,
             },
         }
 
@@ -134,6 +149,16 @@ class BybitBrokerAdapter:
 
     def is_ready(self) -> bool:
         return bool(self.base_url and self.api_key and self.api_secret)
+
+    def missing_config(self):
+        missing = []
+        if not self.base_url:
+            missing.append("BROKER_API_BASE_URL")
+        if not self.api_key:
+            missing.append("BROKER_API_KEY")
+        if not self.api_secret:
+            missing.append("BROKER_API_SECRET")
+        return missing
 
     def _sign(self, timestamp: str, payload_json: str) -> str:
         raw = f"{timestamp}{self.api_key}{self.recv_window}{payload_json}"
