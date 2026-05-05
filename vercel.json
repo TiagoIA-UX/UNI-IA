@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm --prefix zairyx-blog run build",
+  "outputDirectory": "zairyx-blog/.next",
+  "installCommand": "npm install",
+  "framework": "nextjs"
+}
