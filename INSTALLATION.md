@@ -1,4 +1,4 @@
-# 📚 Guia Completo de Instalação - UNI IA
+# 📚 Guia Completo de Instalação — UNI IA
 
 > **Para iniciantes**: Este guia é escrito como se você fosse um aluno aprendendo do zero. Sem jargão desnecessário. Passo a passo.
 
@@ -47,8 +47,6 @@ Clonar significa fazer uma **cópia completa do código** do GitHub para seu com
 
 ```bash
 # Escolha uma pasta onde quer guardar o projeto
-# Exemplo: C:\Users\SeuNome\Desktop\
-
 cd Desktop
 
 # Copie o código do GitHub
@@ -86,57 +84,104 @@ copy .env.example .env.local
 cp .env.example .env.local
 ```
 
-### 2.2 Editar o arquivo `.env.local`
+### 2.2 Proteção obrigatória — leia antes de continuar
 
-Abra o arquivo `.env.local` em um editor de texto (VS Code, Notepad++, etc):
+> ⛔ **ATENÇÃO CRÍTICA**: O arquivo `.env.local` contém suas senhas reais. Ele **NUNCA** deve ir para o GitHub.
+>
+> O projeto já possui um `.gitignore` configurado que bloqueia este arquivo automaticamente. Para confirmar que está protegido, verifique:
+>
+> ```bash
+> # Windows
+> type .gitignore | findstr ".env"
+>
+> # Mac/Linux
+> grep ".env" .gitignore
+> ```
+>
+> Se aparecer `.env.local` ou `.env*.local` na saída, você está protegido. ✅
+> Se não aparecer, adicione manualmente:
+>
+> ```bash
+> echo ".env.local" >> .gitignore
+> ```
+
+### 2.3 Como preencher o `.env.local` corretamente
+
+Abra o arquivo `.env.local` em um editor de texto (VS Code, Notepad++, etc).
+
+**Regras de preenchimento:**
+
+| Regra | Correto ✅ | Errado ❌ |
+|-------|-----------|----------|
+| Sem espaços ao redor do `=` | `CHAVE=valor` | `CHAVE = valor` |
+| Sem aspas (na maioria dos casos) | `URL=https://exemplo.com` | `URL="https://exemplo.com"` |
+| Sem comentários na mesma linha | `CHAVE=valor` | `CHAVE=valor # meu comentário` |
+| Sem espaços no início da linha | `CHAVE=valor` | `  CHAVE=valor` |
+
+**Onde conseguir cada chave:**
+
+#### 🗄️ Supabase (banco de dados)
+1. Acesse [supabase.com](https://supabase.com) → crie uma conta grátis
+2. Clique em **"New Project"** → dê um nome → crie
+3. Aguarde ~2 minutos enquanto o banco é provisionado
+4. Vá em **Settings → API**
+5. Copie os três valores:
 
 ```dotenv
-# ⚠️ PREENCHER COM SEUS VALORES REAIS:
-
-# 1. Supabase (Banco de dados)
-NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=seu_key_aqui
-SUPABASE_SERVICE_ROLE_KEY=sua_chave_secreta_aqui
-
-# 2. Groq API (Motor de IA)
-GROQ_API_KEY=sua_chave_groq_aqui
-
-# 3. Telegram (Notificações)
-TELEGRAM_BOT_TOKEN=seu_token_bot
-TELEGRAM_FREE_CHANNEL=@seu_canal
-
-# ... (e outras variáveis)
+NEXT_PUBLIC_SUPABASE_URL=https://XXXXXXXXXXXXXXXX.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJhbGci...  ← campo "anon / public"
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...             ← campo "service_role" (⚠️ nunca exponha)
 ```
 
-**Onde conseguir essas chaves?**
+#### 🤖 Groq API (motor de IA)
+1. Acesse [console.groq.com](https://console.groq.com) → crie uma conta grátis
+2. Vá em **API Keys → Create API Key**
+3. Dê um nome (ex: `uni-ia-local`) e clique em Create
+4. **Copie imediatamente** — a chave só é exibida uma vez
 
-| Serviço | Como conseguir | Tutorial |
-|---------|---------------|----------|
-| **Supabase** | [supabase.com](https://supabase.com) - criar conta grátis | Crie um projeto, vá em Settings > API |
-| **Groq API** | [console.groq.com](https://console.groq.com) - grátis | Crie conta, vá em API Keys |
-| **Telegram** | Fale com [@BotFather](https://t.me/botfather) no Telegram | `/newbot` e siga as instruções |
+```dotenv
+GROQ_API_KEY=gsk_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
 
-**⚠️ IMPORTANTE**: Nunca compartilhe seu `.env.local`! É como deixar sua senha na internet.
+#### 🔐 CRON_SECRET (segurança do agendador)
+Gere uma senha aleatória segura diretamente no terminal:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Copie o resultado (ex: `a3f9b2c1d4e5f6...`) e cole:
+
+```dotenv
+CRON_SECRET=a3f9b2c1d4e5f6...
+```
+
+#### 📱 Telegram (notificações — opcional)
+1. No Telegram, busque por **@BotFather**
+2. Envie `/newbot` e siga as instruções
+3. Copie o token fornecido
+
+```dotenv
+TELEGRAM_BOT_TOKEN=1234567890:AAxxxxxxxxxxxxxx
+TELEGRAM_FREE_CHANNEL=@nome_do_seu_canal
+```
 
 ---
 
 ## 📦 Passo 3: Instalar Dependências
 
-Dependências são **bibliotecas de código** que o projeto precisa para funcionar.
-
-### 3.1 Backend (Python - Agentes de IA)
+### 3.1 Backend (Python — Agentes de IA)
 
 ```bash
 # Entrar na pasta do backend
 cd ai-sentinel
 
-# Criar ambiente isolado (virtual environment)
+# Criar ambiente isolado
 python -m venv venv
 
-# Ativar o ambiente
+# Ativar o ambiente:
 # Windows:
 venv\Scripts\activate
-
 # Mac/Linux:
 source venv/bin/activate
 
@@ -147,259 +192,283 @@ pip install -r requirements.txt
 cd ..
 ```
 
-**O que significa `venv`?**
-- É uma "caixa isolada" com suas próprias bibliotecas
-- Evita conflitos entre projetos diferentes
+> **O que é `venv`?** Uma "caixa isolada" com suas próprias bibliotecas, que evita conflitos entre projetos diferentes.
 
-### 3.2 Frontend (JavaScript - Interface web)
+### 3.2 Frontend (JavaScript — Interface web)
 
 ```bash
-# Entrar na pasta do frontend
 cd zairyx-blog
-
-# Instalar dependências
 npm install
-
-# Voltar para pasta raiz
 cd ..
 ```
 
 ---
 
-## 🔧 Passo 4: Testar a Instalação
+## 🗄️ Passo 4: Configurar o Banco de Dados
 
-Agora vamos testar se tudo está funcionando.
+1. No painel do Supabase, clique no seu projeto
+2. No menu lateral, clique em **"SQL Editor"** → **"New query"**
+3. Abra o arquivo `schema.sql` da raiz do projeto
+4. Copie todo o conteúdo (`Ctrl+A` → `Ctrl+C`) e cole no editor
+5. Clique em **"Run"** (`Ctrl + Enter`)
 
-### 4.1 Testar Backend
+Resultado esperado: `Success. No rows returned` ✅
+
+---
+
+## ▶️ Passo 5: Rodar o Projeto Localmente
+
+O projeto precisa de **dois terminais abertos ao mesmo tempo**.
+
+### Terminal 1 — Backend (IA)
 
 ```bash
 cd ai-sentinel
 
-# Ativar venv novamente se não estiver ativado
 # Windows:
 venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
 
-# Rodar o servidor
 python run_local_api.py
-
-# Você deve ver algo como:
-# [INFO] Uvicorn running on http://127.0.0.1:8000
 ```
 
-**Deixe este terminal rodando!** Abra um novo terminal para o próximo passo.
+Aguarde:
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000
+```
+✅ Backend rodando. **Não feche este terminal.**
 
-### 4.2 Testar Frontend
+### Terminal 2 — Frontend (interface)
 
 ```bash
-# Novo terminal
 cd zairyx-blog
 npm run dev
-
-# Você deve ver algo como:
-# ready - started server on 0.0.0.0:3000
 ```
 
-### 4.3 Acessar a aplicação
-
-Abra seu navegador e vá para:
-
+Aguarde:
 ```
-http://localhost:3000
+▲ Next.js
+- Local: http://localhost:3000
+- Ready in 2.1s
 ```
+✅ Frontend rodando. **Não feche este terminal.**
 
-**Você deve ver a página inicial do UNI IA!** ✅
+### Para encerrar
+
+Quando quiser parar, pressione `Ctrl + C` em cada terminal.
 
 ---
 
-## 🎮 Passo 5: Usar a Aplicação
+## 🌐 Passo 6: Acessar a Aplicação
 
-### 5.1 Fluxo básico de operação
+Abra seu navegador e acesse: **[http://localhost:3000](http://localhost:3000)**
+
+Você verá a interface do UNI IA carregando. ✅
+
+---
+
+## 🎮 Passo 7: Fluxo de Uso
 
 ```
-1. Ir para http://localhost:3000/plataforma
-2. Fazer login com suas credenciais
-3. Selecionar um ativo (ex: BTCUSD)
-4. Clicar em "Analisar"
-5. Ver o score e classificação da IA
-6. Aprovar ou rejeitar a operação
+1. Acesse http://localhost:3000/plataforma
+2. Faça login com suas credenciais
+3. Selecione um ativo (ex: BTCUSD)
+4. Clique em "Analisar"
+5. Veja o score e classificação da IA
+6. Aprove ou rejeite a operação
 ```
 
-### 5.2 Modo de operação
-
-A aplicação tem **3 modos**:
+### Modos de operação
 
 | Modo | O que faz | Quando usar |
 |------|----------|------------|
-| **`paper`** (padrão) | Simula operações, não gasta dinheiro real | Aprendizado e testes |
-| **`approval`** | Pede sua aprovação antes de cada operação | Treinamento |
-| **`live`** | Executa operações REAIS de verdade | Só após homologação completa |
+| **`paper`** (padrão) | Simula operações, sem dinheiro real | ✅ Sempre no início |
+| **`approval`** | Pede aprovação antes de cada operação | Após 7+ dias em paper |
+| **`live`** | Executa operações **reais** | Só após homologação completa |
 
-**Configurar modo:**
-
-No arquivo `.env.local`:
+Configure no `.env.local`:
 ```dotenv
-DESK_MODE=paper          # Seguro - simula
-DESK_REQUIRE_MANUAL_APPROVAL=true  # Pede aprovação
+DESK_MODE=paper
+DESK_REQUIRE_MANUAL_APPROVAL=true
 ```
 
 ---
 
-## 🧪 Passo 6: Testar sem Risco (Recomendado)
+## 🧪 Passo 8: Roteiro Progressivo de Testes (Recomendado)
 
-Antes de usar dinheiro real, siga este roteiro:
+**Não pule etapas. Sua segurança financeira depende disso.**
 
-### 6.1 Testar em `paper` (sem risco)
-```
-- Deixe DESK_MODE=paper
-- Deixe DESK_REQUIRE_MANUAL_APPROVAL=true
+### Etapa 1 — Modo paper (mínimo 7 dias)
+- `DESK_MODE=paper`
+- `DESK_REQUIRE_MANUAL_APPROVAL=true`
 - Faça 100+ análises de teste
-- Valide os sinais durante 7 dias
-```
+- Anote e valide os sinais
 
-### 6.2 Testar com aprovação manual
-```
-- Quando confiar, deixe DESK_MODE=paper mas monitore
-- Analise cada operação proposta
-- Aprove/rejeite manualmente
-```
+### Etapa 2 — Aprovação manual (7–14 dias)
+- Continue em `paper`
+- Analise e decida manualmente cada operação proposta
+- Registre acertos e erros
 
-### 6.3 Só depois: modo live
-```
-- Comece com quantia MUITO pequena
-- 1-2 semanas de operação real
-- Aumente gradualmente se tudo der certo
-```
+### Etapa 3 — Modo live (somente após as etapas anteriores)
+- Comece com no máximo 1–2% do seu capital
+- Aumente gradualmente apenas com resultados consistentes
 
 ---
 
 ## 🐛 Solução de Problemas
 
-### Problema: "Module not found: @/lib/supabase/admin"
-
-**Solução**: Certifique-se que está dentro da pasta `zairyx-blog`:
+### ❌ "Module not found: @/lib/supabase/admin"
+Certifique-se de rodar de dentro da pasta correta:
 ```bash
 cd zairyx-blog
 npm run dev
 ```
 
-### Problema: "CRON_SECRET não configurado"
-
-**Solução**: Adicione ao `.env.local`:
-```dotenv
-CRON_SECRET=seu_cron_secret_aqui
-```
-
-### Problema: Conexão com Supabase negada
-
-**Solução**: Verifique se:
-1. A URL do Supabase está correta
-2. As chaves estão certas
-3. Seu projeto no Supabase está ativo
-
-### Problema: Telegram não está recebendo mensagens
-
-**Solução**:
-1. Verifique se `TELEGRAM_BOT_TOKEN` está correto
-2. Verifique se `TELEGRAM_FREE_CHANNEL` existe
-3. Rodar: `curl http://localhost:8000/api/telegram/status`
-
----
-
-## 📚 Próximos Passos
-
-Após instalação bem-sucedida:
-
-### 1. Ler a documentação
-- [README.md](../README.md) - Visão geral técnica
-- [schema.sql](../schema.sql) - Estrutura do banco de dados
-- [.env.example](../.env.example) - Todas as variáveis disponíveis
-
-### 2. Explorar a aplicação
+### ❌ "CRON_SECRET não configurado"
 ```bash
-# Terminal 1: Backend rodando
-cd ai-sentinel && python run_local_api.py
+# Verifique se o arquivo .env.local existe (não .env.example):
+ls -la | grep .env      # Mac/Linux
+dir | findstr ".env"    # Windows
+```
+Adicione ao `.env.local`: `CRON_SECRET=seu_valor_aqui`
 
-# Terminal 2: Frontend rodando
-cd zairyx-blog && npm run dev
+### ❌ Conexão com Supabase negada
+1. Confirme que `NEXT_PUBLIC_SUPABASE_URL` começa com `https://` e termina com `.supabase.co`
+2. Verifique se não há espaços extras nas chaves
+3. Confirme que o projeto no Supabase não está pausado
 
-# Terminal 3: Você pode testar a API
-curl http://localhost:8000/api/desk/status
+### ❌ Telegram não recebe mensagens
+1. Verifique se o bot foi adicionado como **admin** no canal
+2. Teste: `curl http://localhost:8000/api/telegram/status`
+
+### ❌ Porta 3000 já em uso
+```bash
+# Mac/Linux:
+lsof -ti:3000 | xargs kill -9
+
+# Windows:
+netstat -ano | findstr :3000
+taskkill /PID <numero> /F
 ```
 
-### 3. Customizar para seus ativos
-No `.env.local`, mude:
-```dotenv
-SIGNAL_SCAN_ASSETS=BTCUSD,ETHUSD    # Seus ativos
-SIGNAL_MIN_SCORE=75                  # Sua tolerância a risco
-SIGNAL_SCAN_INTERVAL_SECONDS=60     # Frequência de análise
+### ❌ "python: command not found" no Windows
+1. Abra "Adicionar ou remover programas" → Python → Modify
+2. Marque **"Add Python to PATH"**
+3. Reinicie o terminal
+
+### ❌ "npm: command not found"
+1. Reinstale o Node.js em [nodejs.org](https://nodejs.org)
+2. Feche **todos** os terminais e abra um novo
+
+### ❌ Erro ao reinstalar dependências do Node
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### ❌ `pip install` falha com erro de permissão
+```bash
+pip install -r requirements.txt --user
+```
+
+### ❌ `.env.local` foi para o GitHub por engano
+**Ação imediata — não ignore isso:**
+1. Revogue **todas** as chaves comprometidas (Supabase, Groq, Telegram) nos respectivos painéis
+2. Gere novas chaves
+3. Remova o arquivo do histórico Git:
+```bash
+git rm --cached .env.local
+echo ".env.local" >> .gitignore
+git commit -m "fix: remove .env.local and add to gitignore"
+git push
 ```
 
 ---
 
-## 🎓 Entender a Arquitetura
+## 🎓 Arquitetura do Sistema
 
-UNI IA usa **múltiplos agentes especializados**:
+UNI IA usa **múltiplos agentes especializados** que votam em conjunto:
 
 ```
 ┌─────────────────────────────────────────────┐
 │         ORQUESTRA DE DECISÃO (AEGIS)         │
 ├─────────────────────────────────────────────┤
 │                                             │
-│  MacroAgent     → Cenário geral (risk-on/off)
-│  ATLAS          → Estrutura técnica (gráficos)
-│  NewsAgent      → Notícias e contexto
-│  SentimentAgent → Sentimento do mercado
-│  TrendsAgent    → Anomalias de volume
-│  Fundamentalist → Fundamentos da empresa
+│  MacroAgent     → Cenário geral (risk-on/off)│
+│  ATLAS          → Estrutura técnica          │
+│  NewsAgent      → Notícias e contexto        │
+│  SentimentAgent → Sentimento do mercado      │
+│  TrendsAgent    → Anomalias de volume        │
+│  Fundamentalist → Fundamentos do ativo       │
 │                                             │
 │         ↓↓↓ (Todos votam) ↓↓↓              │
 │                                             │
-│  SENTINEL (Gate de Risco) → Aprova/Rejeita │
+│  SENTINEL (Gate de Risco) → Aprova/Rejeita  │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-Cada agente é um **especialista** em sua área. O sistema **funde as opiniões** com governança.
+Nenhuma decisão passa sem consenso. Cada voto é registrado e auditável.
 
 ---
 
-## 📞 Suporte
+## 📚 Próximos Passos
 
-Se algo não funcionar:
+1. **Leia a documentação**:
+   - [README.md](../README.md) — visão geral técnica e estratégica
+   - [schema.sql](../schema.sql) — estrutura do banco de dados
+   - [.env.example](../.env.example) — todas as variáveis disponíveis
 
-1. **Verifique os logs**:
-   ```bash
-   # Backend: veja as mensagens no terminal onde rodou python
-   # Frontend: abra DevTools (F12) no navegador
+2. **Explore a API**: `curl http://localhost:8000/api/desk/status`
+
+3. **Customize para seus ativos** no `.env.local`:
+   ```dotenv
+   SIGNAL_SCAN_ASSETS=BTCUSD,ETHUSD
+   SIGNAL_MIN_SCORE=75
+   SIGNAL_SCAN_INTERVAL_SECONDS=60
    ```
-
-2. **Consulte a documentação**:
-   - [Variáveis de ambiente](../.env.example)
-   - [Schema do banco](../schema.sql)
-   - [README técnico](../README.md)
-
-3. **Contato**:
-   - Issues no GitHub: https://github.com/TiagoIA-UX/UNI-IA/issues
-   - Email: (a ser preenchido)
 
 ---
 
 ## ✅ Checklist de Instalação Completa
 
-- [ ] Git, Node.js, Python instalados
-- [ ] Repositório clonado (`git clone`)
-- [ ] `.env.local` criado e preenchido
-- [ ] Dependências instaladas (`pip install`, `npm install`)
-- [ ] Backend testado (`python run_local_api.py`)
-- [ ] Frontend testado (`npm run dev`)
+- [ ] Git, Node.js e Python instalados e verificados
+- [ ] Repositório clonado com `git clone`
+- [ ] `.env.local` criado (não `.env.example`)
+- [ ] `.env.local` protegido no `.gitignore`
+- [ ] Supabase: URL e chaves preenchidas corretamente
+- [ ] Groq: API Key preenchida
+- [ ] CRON_SECRET gerado e preenchido
+- [ ] Schema SQL executado no Supabase (5 tabelas criadas)
+- [ ] Backend rodando (`python run_local_api.py` → porta 8000)
+- [ ] Frontend rodando (`npm run dev` → porta 3000)
 - [ ] Aplicação acessível em `http://localhost:3000`
-- [ ] Modo testado em `paper`
-- [ ] Documentação lida
+- [ ] Pelo menos 1 análise feita em modo `paper`
+- [ ] README.md lido
 
-**Se tudo está verde, parabéns! Você está pronto para usar UNI IA!** 🎉
+**Se tudo está marcado: parabéns, você está pronto para usar o UNI IA!** 🎉
 
 ---
 
-> **Última atualização**: Maio 5, 2026
-> **Versão**: 1.0
+## 📞 Suporte
+
+Se algo não funcionar após seguir este guia:
+
+1. **Verifique os logs**:
+   - Backend: mensagens no terminal onde rodou `python run_local_api.py`
+   - Frontend: abra DevTools no navegador (`F12` → aba Console)
+
+2. **Abra uma issue no GitHub**:
+   [github.com/TiagoIA-UX/UNI-IA/issues](https://github.com/TiagoIA-UX/UNI-IA/issues)
+   Inclua: sistema operacional, versões instaladas e o erro completo.
+
+3. **Contato direto**:
+   - 📧 Email: [oficialuni.iabrasil@gmail.com](mailto:oficialuni.iabrasil@gmail.com)
+   - 💬 WhatsApp: [+55 (19) 99688-7993](https://wa.me/5519996887993)
+
+---
+
+> **Última atualização**: 05 de Maio de 2026
+> **Versão**: 1.1 (unificada)
 > **Compatibilidade**: Windows, Mac, Linux
