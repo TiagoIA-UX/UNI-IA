@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 
-const BYBIT_BASE_URL = 'https://api.bybit.com'
-const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
-const INTERVAL = '15m'
+const BYBIT_BASE_URL = (process.env.BROKER_API_BASE_URL || 'https://api.bybit.com').replace(/\/$/, '')
+const SYMBOLS = (process.env.SIGNAL_SCAN_ASSETS || 'BTCUSDT,ETHUSDT,SOLUSDT')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+const INTERVAL = process.env.BYBIT_SIGNAL_INTERVAL || '15m'
 
 type BybitKline = {
   id: string
