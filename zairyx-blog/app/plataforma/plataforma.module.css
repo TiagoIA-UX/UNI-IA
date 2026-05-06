@@ -381,3 +381,332 @@
     width: fit-content;
   }
 }
+/* =============================================================
+   DESTINO: E:\UNI.IA\zairyx-blog\app\plataforma\plataforma.module.css
+   ACAO: Nao substitua o arquivo - ADICIONE este bloco no FINAL do existente
+   ============================================================= */
+
+/* Container principal */
+.liveFeedContainer {
+  width: 100%;
+  margin-top: 2rem;
+}
+
+/* Header */
+.liveFeedHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.liveFeedTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a5276;
+}
+.liveFeedIcon { font-size: 1.1rem; }
+.liveFeedMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.liveFeedTick { font-size: 0.75rem; color: #666; }
+
+/* Status badges */
+.statusBadge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.statusConnecting   { background: #fef9e7; color: #7d6608; border: 1px solid #f0c040; }
+.statusConnected    { background: #d5f5e3; color: #1e8449; border: 1px solid #58d68d; }
+.statusReconnecting { background: #d6eaf8; color: #1a5276; border: 1px solid #5dade2; }
+.statusError        { background: #fadbd8; color: #922b21; border: 1px solid #e74c3c; }
+
+/* Loading state */
+.liveFeedLoading {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Wrapper e tabela */
+.liveFeedWrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #d0d7de;
+}
+.liveFeedTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+/* Cabeçalho */
+.liveFeedTable thead { background: #0d2b4e; }
+.liveFeedTable thead th {
+  color: #ffffff;
+  font-weight: 600;
+  padding: 10px 14px;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+}
+.liveFeedTable thead th:first-child { border-radius: 8px 0 0 0; }
+.liveFeedTable thead th:last-child  { border-radius: 0 8px 0 0; }
+
+/* Linhas */
+.liveFeedRow {
+  border-bottom: 1px solid #eaecef;
+  transition: background 0.15s;
+}
+.liveFeedRow:nth-child(odd)  { background: #f8f9fa; }
+.liveFeedRow:nth-child(even) { background: #ffffff; }
+.liveFeedRow:hover           { background: #eaf4fb; }
+.liveFeedTable td {
+  padding: 9px 14px;
+  color: #0a0a0a;
+  vertical-align: middle;
+}
+
+/* Células específicas */
+.liveFeedSymbol {
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  color: #0d2b4e;
+}
+.liveFeedPrice {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+.priceUp   { color: #1e8449 !important; }
+.priceDown { color: #922b21 !important; }
+
+.changePositive { color: #1e8449; font-weight: 600; }
+.changeNegative { color: #922b21; font-weight: 600; }
+
+/* Badge de bias */
+.biasBadge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.biasLONG    { background: #d5f5e3; color: #1e8449; border: 1px solid #58d68d; }
+.biasSHORT   { background: #fadbd8; color: #922b21; border: 1px solid #e74c3c; }
+.biasNEUTRAL { background: #f4f4f4; color: #555555; border: 1px solid #cccccc; }
+
+/* Barra de confiança */
+.confBarWrap {
+  position: relative;
+  width: 80px;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+}
+.confBarFill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.confLong    { background: #27ae60; }
+.confShort   { background: #e74c3c; }
+.confNeutral { background: #aaaaaa; }
+.confLabel {
+  position: absolute;
+  left: 88px;
+  font-size: 0.72rem;
+  color: #444;
+  white-space: nowrap;
+}
+
+/* Demais células */
+.liveFeedVol { font-family: monospace; color: #555555; }
+.liveFeedAge { font-size: 0.75rem; color: #888888; white-space: nowrap; }
+
+/* Disclaimer */
+.liveFeedDisclaimer {
+  font-size: 0.72rem;
+  color: #999999;
+  margin-top: 0.5rem;
+  text-align: right;
+}.liveFeedContainer {
+  width: 100%;
+  margin-top: 2rem;
+}
+
+/* Header */
+.liveFeedHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.liveFeedTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a5276;
+}
+.liveFeedIcon { font-size: 1.1rem; }
+.liveFeedMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.liveFeedTick { font-size: 0.75rem; color: #666; }
+
+/* Status badges */
+.statusBadge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.statusConnecting   { background: #fef9e7; color: #7d6608; border: 1px solid #f0c040; }
+.statusConnected    { background: #d5f5e3; color: #1e8449; border: 1px solid #58d68d; }
+.statusReconnecting { background: #d6eaf8; color: #1a5276; border: 1px solid #5dade2; }
+.statusError        { background: #fadbd8; color: #922b21; border: 1px solid #e74c3c; }
+
+/* Loading state */
+.liveFeedLoading {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Wrapper e tabela */
+.liveFeedWrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #d0d7de;
+}
+.liveFeedTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+/* Cabeçalho */
+.liveFeedTable thead { background: #0d2b4e; }
+.liveFeedTable thead th {
+  color: #ffffff;
+  font-weight: 600;
+  padding: 10px 14px;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+}
+.liveFeedTable thead th:first-child { border-radius: 8px 0 0 0; }
+.liveFeedTable thead th:last-child  { border-radius: 0 8px 0 0; }
+
+/* Linhas */
+.liveFeedRow {
+  border-bottom: 1px solid #eaecef;
+  transition: background 0.15s;
+}
+.liveFeedRow:nth-child(odd)  { background: #f8f9fa; }
+.liveFeedRow:nth-child(even) { background: #ffffff; }
+.liveFeedRow:hover           { background: #eaf4fb; }
+.liveFeedTable td {
+  padding: 9px 14px;
+  color: #0a0a0a;
+  vertical-align: middle;
+}
+
+/* Células específicas */
+.liveFeedSymbol {
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  color: #0d2b4e;
+}
+.liveFeedPrice {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+.priceUp   { color: #1e8449 !important; }
+.priceDown { color: #922b21 !important; }
+
+.changePositive { color: #1e8449; font-weight: 600; }
+.changeNegative { color: #922b21; font-weight: 600; }
+
+/* Badge de bias */
+.biasBadge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.biasLONG    { background: #d5f5e3; color: #1e8449; border: 1px solid #58d68d; }
+.biasSHORT   { background: #fadbd8; color: #922b21; border: 1px solid #e74c3c; }
+.biasNEUTRAL { background: #f4f4f4; color: #555555; border: 1px solid #cccccc; }
+
+/* Barra de confiança */
+.confBarWrap {
+  position: relative;
+  width: 80px;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+}
+.confBarFill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.confLong    { background: #27ae60; }
+.confShort   { background: #e74c3c; }
+.confNeutral { background: #aaaaaa; }
+.confLabel {
+  position: absolute;
+  left: 88px;
+  font-size: 0.72rem;
+  color: #444;
+  white-space: nowrap;
+}
+
+/* Demais células */
+.liveFeedVol { font-family: monospace; color: #555555; }
+.liveFeedAge { font-size: 0.75rem; color: #888888; white-space: nowrap; }
+
+/* Disclaimer */
+.liveFeedDisclaimer {
+  font-size: 0.72rem;
+  color: #999999;
+  margin-top: 0.5rem;
+  text-align: right;
+}
