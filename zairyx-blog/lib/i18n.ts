@@ -18,8 +18,11 @@ export const localeLabels: Record<Locale, string> = {
 export const homeCopy: Record<Locale, {
   heroTitle: string;
   heroSubtitle: string;
+  heroStatement: string;
   primaryCta: string;
   secondaryCta: string;
+  authorityTitle: string;
+  authorityItems: [string, string, string, string];
   feature1Title: string;
   feature1Body: string;
   feature2Title: string;
@@ -30,10 +33,18 @@ export const homeCopy: Record<Locale, {
   edgeBody: string;
 }> = {
   en: {
-    heroTitle: 'Institutional-Grade AI Signals for FX, Macro and Indexes',
-    heroSubtitle: 'Uni IA orchestrates 7 specialized agents to deliver explainable entries and exits in real time. Built for paid subscribers, desks and high-performance operators.',
+    heroTitle: 'Uni IA - Because uncontrolled risk is elimination.',
+    heroSubtitle: 'Institutional architecture for risk, discipline and execution. Strategy without governance is speculation.',
+    heroStatement: 'Build structure before chasing profit.',
     primaryCta: 'Start Premium Access',
     secondaryCta: 'Join Free Telegram',
+    authorityTitle: 'Institutional control layer',
+    authorityItems: [
+      'Deterministic backtesting',
+      'Mandatory RiskFilter',
+      'Measurable governance',
+      'Capital protected by mandate',
+    ],
     feature1Title: 'Position Guardian Agent',
     feature1Body: 'When market structure flips after entry, your risk desk receives a close-position alert before the crowd reacts.',
     feature2Title: 'Multi-Timeframe Validation',
@@ -44,10 +55,18 @@ export const homeCopy: Record<Locale, {
     edgeBody: 'Compared to generic signal channels, copy-trading rooms and static chart alerts, Uni IA delivers explainable alerts, risk context and execution-ready confidence scores.',
   },
   es: {
-    heroTitle: 'Senales de IA de nivel institucional para FX, macro e indices',
-    heroSubtitle: 'Uni IA orquesta 7 agentes especializados para entregar entradas y salidas explicables en tiempo real.',
+    heroTitle: 'Uni IA - Porque riesgo sin control es eliminacion.',
+    heroSubtitle: 'Arquitectura institucional de riesgo, disciplina y ejecucion. Estrategia sin gobernanza es especulacion.',
+    heroStatement: 'Construye estructura antes de perseguir beneficio.',
     primaryCta: 'Comenzar acceso premium',
     secondaryCta: 'Entrar al Telegram gratis',
+    authorityTitle: 'Capa institucional de control',
+    authorityItems: [
+      'Backtest deterministico',
+      'RiskFilter obligatorio',
+      'Gobernanza medible',
+      'Capital protegido por mandato',
+    ],
     feature1Title: 'Agente guardian de posicion',
     feature1Body: 'Si la estructura del mercado cambia tras la entrada, recibes alerta de cierre antes que la mayoria.',
     feature2Title: 'Validacion multi-timeframe',
@@ -58,10 +77,18 @@ export const homeCopy: Record<Locale, {
     edgeBody: 'Frente a canales genericos, copy-trading y alertas estaticas, Uni IA entrega contexto de riesgo y score explicable.',
   },
   pt: {
-    heroTitle: 'Sinais de IA Institucional para Forex, Macro e Indices',
-    heroSubtitle: 'O Uni IA orquestra 7 agentes especializados para entregar entradas e saidas explicaveis em tempo real.',
+    heroTitle: 'Uni IA - Porque risco sem controle e eliminacao.',
+    heroSubtitle: 'Arquitetura institucional de risco, disciplina e execucao. Estrategia sem governanca e aposta.',
+    heroStatement: 'Construa estrutura antes de buscar lucro.',
     primaryCta: 'Iniciar Acesso Premium',
     secondaryCta: 'Entrar no Telegram Gratis',
+    authorityTitle: 'Camada institucional de controle',
+    authorityItems: [
+      'Backtest deterministico',
+      'RiskFilter obrigatorio',
+      'Governanca mensuravel',
+      'Capital protegido por mandato',
+    ],
     feature1Title: 'Agente Guardiao de Posicao',
     feature1Body: 'Quando a estrutura vira apos sua entrada, voce recebe alerta de fechamento antes do mercado em massa.',
     feature2Title: 'Validacao Multi-Timeframe',
@@ -72,10 +99,18 @@ export const homeCopy: Record<Locale, {
     edgeBody: 'Contra grupos genericos, copy-trading e alertas estaticos, o Uni IA entrega contexto de risco e score explicavel.',
   },
   ar: {
-    heroTitle: 'اشارات ذكاء اصطناعي بمستوى مؤسسي للفوركس والماكرو والمؤشرات',
-    heroSubtitle: 'Uni IA يدير 7 وكلاء متخصصين لتقديم دخول وخروج واضح في الوقت الحقيقي.',
+    heroTitle: 'Uni IA - لان المخاطر بلا سيطرة تعني الاقصاء.',
+    heroSubtitle: 'بنية مؤسسية للمخاطر والانضباط والتنفيذ. الاستراتيجية بلا حوكمة هي مضاربة.',
+    heroStatement: 'ابن الهيكل قبل مطاردة الربح.',
     primaryCta: 'ابدأ الوصول المميز',
     secondaryCta: 'انضم الى تليجرام المجاني',
+    authorityTitle: 'طبقة السيطرة المؤسسية',
+    authorityItems: [
+      'اختبار رجعي حتمي',
+      'مرشح مخاطر الزامي',
+      'حوكمة قابلة للقياس',
+      'راس مال محمي حسب التفويض',
+    ],
     feature1Title: 'وكيل حماية الصفقات',
     feature1Body: 'عند انعكاس الهيكل بعد الدخول يصلك تنبيه اغلاق مبكر قبل السوق العام.',
     feature2Title: 'تحقق متعدد الاطارات الزمنية',
@@ -86,10 +121,18 @@ export const homeCopy: Record<Locale, {
     edgeBody: 'مقارنة بالقنوات العامة ونسخ التداول والتنبيهات الثابتة، يقدم Uni IA سياق مخاطر ودرجة ثقة واضحة.',
   },
   zh: {
-    heroTitle: '面向外汇 宏观与指数的机构级AI信号',
-    heroSubtitle: 'Uni IA 协同7个专业代理 实时提供可解释的入场与离场信号。',
+    heroTitle: 'Uni IA - 风险失控 就会被淘汰。',
+    heroSubtitle: '面向风险 纪律与执行的机构化架构。没有治理的策略只是投机。',
+    heroStatement: '先建立结构 再追求利润。',
     primaryCta: '开始高级访问',
     secondaryCta: '加入免费Telegram',
+    authorityTitle: '机构控制层',
+    authorityItems: [
+      '确定性回测',
+      '强制 RiskFilter',
+      '可度量治理',
+      '按任务保护资本',
+    ],
     feature1Title: '仓位守护代理',
     feature1Body: '入场后结构反转时 系统会先于市场人群发出平仓预警。',
     feature2Title: '多周期一致性验证',

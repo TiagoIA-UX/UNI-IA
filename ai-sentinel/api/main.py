@@ -14,6 +14,13 @@ from api.signal_scanner import SignalScanner
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env.local")
 
+# CORS: em produção, defina ALLOWED_ORIGINS com as origens reais separadas por vírgula.
+# Ex: ALLOWED_ORIGINS=https://zairyx.ai,https://www.zairyx.ai
+# Se não definido, cai para ["*"] apenas em modo local/paper — nunca use "*" em live.
+import os as _os
+_raw_origins = _os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+
 app = FastAPI(
     title="UNI IA",
     description="API Mestre de Orquestração com Sinais de Alta Performance via IA Multi-Framework",
@@ -22,7 +29,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

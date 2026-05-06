@@ -52,6 +52,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
+    -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
   }
   .logo {
@@ -584,6 +585,7 @@
     gap: 12px;
     border-radius: 12px;
     z-index: 50;
+    -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
   }
   .spinner {
@@ -653,14 +655,40 @@
   .badge-red { background: rgba(255,23,68,0.1); color: var(--red2); }
   .badge-yellow { background: rgba(255,214,0,0.1); color: var(--yellow); }
   .badge-gray { background: var(--bg4); color: var(--text3); }
+
+  /* ===== CLASSES MIGRADAS DE INLINE STYLES ===== */
+  .logo-row { display: flex; align-items: center; gap: 8px; }
+  .logo-img { width: 38px; height: 38px; filter: drop-shadow(0 0 8px rgba(0, 230, 118, 0.5)); }
+  .label-block { display: block; margin-bottom: 5px; }
+  .cursor-pointer { cursor: pointer; }
+  .card-pos-rel { position: relative; }
+  .d-flex-ai-gap10 { display: flex; align-items: center; gap: 10px; }
+  .d-flex-gap6 { display: flex; gap: 6px; }
+  .empty-state-lg { padding: 30px 0; font-size: 13px; }
+  .span-2-pad { grid-column: span 2; padding: 20px; }
+  .pad-20 { padding: 20px; }
+  .pad-15 { padding: 15px; }
+  .pad-16 { padding: 16px; }
+  .mb-10 { margin-bottom: 10px; }
+  .conf-gauge-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+  .conf-needle-init { left: 50%; }
+  .mb-10-center { text-align: center; margin-bottom: 10px; }
+  .learn-acc-display { font-size: 42px; font-weight: 900; color: var(--accent2); }
+  .text-xxs-dim { font-size: 11px; color: var(--text3); }
+  .text-xxs-dim-center { font-size: 11px; color: var(--text3); text-align: center; line-height: 1.8; }
+  /* Estado inicial de elementos controlados por JS */
+  #chart-loading { display: none; }
+  #signal-loading { display: none; position: relative; height: 120px; border-radius: 10px; }
+  #factors-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; overflow-y: auto; padding: 20px; }
+  .modal-inner { max-width: 600px; margin: 0 auto; background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
 </style>
 </head>
 <body>
 
 <!-- ===== HEADER ===== -->
 <header class="header">
-  <div class="logo" style="display:flex; align-items:center; gap:8px;">
-    <img src="logo.svg" alt="Uni IA" style="width: 38px; height: 38px; filter: drop-shadow(0 0 8px rgba(0,230,118,0.5));">
+  <div class="logo logo-row">
+    <img src="logo.svg" alt="Uni IA" class="logo-img">
     <span>Uni IA</span>
   </div>
   <div class="header-stats">
@@ -698,7 +726,7 @@
         <span class="badge badge-gray" id="ai-status-badge">Desconectada</span>
       </div>
       <div class="card-body">
-        <label class="text-xs text-dim" style="display:block;margin-bottom:5px">API Key</label>
+        <label class="text-xs text-dim label-block">API Key</label>
         <div class="api-input-wrap">
           <input type="password" class="api-input" id="api-key" placeholder="gsk_..." autocomplete="off">
           <button class="btn btn-ghost btn-sm" onclick="toggleApiKey()">👁</button>
@@ -706,8 +734,8 @@
         <div class="api-status none" id="api-status-msg">⚠ Cole sua chave Groq gratuita acima</div>
         <button class="btn btn-ghost btn-sm w-full mt-2" onclick="testApiKey()">Testar conexão</button>
         <div class="divider"></div>
-        <label class="text-xs text-dim" style="display:block;margin-bottom:5px">Modelo</label>
-        <select id="model-select" class="api-input" style="cursor:pointer" onchange="changeModel()">
+        <label class="text-xs text-dim label-block">Modelo</label>
+        <select id="model-select" class="api-input cursor-pointer" title="Selecionar modelo de IA" onchange="changeModel()">
           <option value="llama-3.3-70b-versatile">llama-3.3-70b (Recomendado)</option>
           <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
           <option value="gemma2-9b-it">Gemma2 9B</option>
@@ -731,14 +759,14 @@
   <main class="center-panel">
 
     <!-- Gráfico -->
-    <div class="card" style="position:relative">
+    <div class="card card-pos-rel">
       <div class="card-header">
-        <div style="display:flex;align-items:center;gap:10px">
+        <div class="d-flex-ai-gap10">
           <span class="card-title" id="chart-title">Selecione um ativo</span>
           <span class="badge badge-accent" id="chart-price">--</span>
           <span class="badge" id="chart-change">--</span>
         </div>
-        <div style="display:flex;gap:6px">
+        <div class="d-flex-gap6">
           <button class="btn btn-ghost btn-sm" onclick="refreshData()">🔄 Atualizar</button>
           <button class="btn btn-primary btn-sm" onclick="runFullAnalysis()">⚡ Analisar</button>
         </div>
@@ -754,7 +782,7 @@
       <div id="chart-container">
         <div id="chart"></div>
         <div id="volume-chart"></div>
-        <div class="loading-overlay" id="chart-loading" style="display:none">
+        <div class="loading-overlay" id="chart-loading">
           <div class="spinner"></div>
           <div class="loading-text">Carregando dados...</div>
         </div>
@@ -768,12 +796,12 @@
         <span class="badge badge-gray" id="signal-source">aguardando análise</span>
       </div>
       <div class="card-body">
-        <div class="loading-overlay" id="signal-loading" style="display:none;position:relative;height:120px;border-radius:10px;">
+        <div class="loading-overlay" id="signal-loading">
           <div class="spinner"></div>
           <div class="loading-text">IA analisando...</div>
         </div>
         <div id="signal-content">
-          <div class="text-center text-dim" style="padding:30px 0;font-size:13px">
+          <div class="text-center text-dim empty-state-lg">
             Selecione um ativo e clique em ⚡ Analisar para gerar um sinal
           </div>
         </div>
@@ -793,35 +821,35 @@
       <!-- Indicadores -->
       <div class="tab-content active card-body" id="tab-indicators">
         <div class="ind-grid" id="ind-grid-content">
-          <div class="text-center text-dim text-sm" style="grid-column:span 2;padding:20px">Analise um ativo para ver os indicadores</div>
+          <div class="text-center text-dim text-sm span-2-pad">Analise um ativo para ver os indicadores</div>
         </div>
       </div>
 
       <!-- Padrões -->
       <div class="tab-content card-body" id="tab-patterns">
         <div id="patterns-content">
-          <div class="text-center text-dim text-sm" style="padding:20px">Nenhum padrão detectado ainda</div>
+          <div class="text-center text-dim text-sm pad-20">Nenhum padrão detectado ainda</div>
         </div>
       </div>
 
       <!-- Raciocínio IA -->
       <div class="tab-content card-body" id="tab-ai-reasoning">
         <div id="ai-reasoning-content">
-          <div class="text-center text-dim text-sm" style="padding:20px">Execute uma análise para ver o raciocínio da IA</div>
+          <div class="text-center text-dim text-sm pad-20">Execute uma análise para ver o raciocínio da IA</div>
         </div>
       </div>
 
       <!-- Notícias -->
       <div class="tab-content card-body" id="tab-news">
         <div id="news-content">
-          <div class="text-center text-dim text-sm" style="padding:20px">Carregando notícias...</div>
+          <div class="text-center text-dim text-sm pad-20">Carregando notícias...</div>
         </div>
       </div>
 
       <!-- Histórico -->
       <div class="tab-content card-body" id="tab-history">
         <div id="history-content">
-          <div class="text-center text-dim text-sm" style="padding:20px">Nenhum sinal registrado ainda</div>
+          <div class="text-center text-dim text-sm pad-20">Nenhum sinal registrado ainda</div>
         </div>
       </div>
 
@@ -838,10 +866,10 @@
         <span class="badge" id="regime-badge">--</span>
       </div>
       <div class="card-body">
-        <div style="margin-bottom:10px">
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">BULL vs BEAR</div>
+        <div class="mb-10">
+          <div class="conf-gauge-label">BULL vs BEAR</div>
           <div class="confluence-bar">
-            <div class="conf-needle" id="conf-needle" style="left:50%"></div>
+            <div class="conf-needle conf-needle-init" id="conf-needle"></div>
           </div>
           <div class="conf-labels"><span>BEAR</span><span>NEUTRO</span><span>BULL</span></div>
         </div>
@@ -869,7 +897,7 @@
         <span class="card-title">📐 Suporte & Resistência</span>
       </div>
       <div class="card-body" id="sr-panel">
-        <div class="text-dim text-sm text-center" style="padding:15px">Analise um ativo</div>
+        <div class="text-dim text-sm text-center pad-15">Analise um ativo</div>
       </div>
     </div>
 
@@ -887,9 +915,9 @@
         <span class="card-title">📚 Aprendizado</span>
       </div>
       <div class="card-body">
-        <div style="text-align:center;margin-bottom:10px">
-          <div style="font-size:42px;font-weight:900;color:var(--accent2)" id="learn-acc">--%</div>
-          <div style="font-size:11px;color:var(--text3)">Taxa de acerto registrada</div>
+        <div class="mb-10-center">
+          <div class="learn-acc-display" id="learn-acc">--%</div>
+          <div class="text-xxs-dim">Taxa de acerto registrada</div>
         </div>
         <div class="ind-grid">
           <div class="ind-item"><span class="ind-name">Total</span><span class="ind-val" id="learn-total">0</span></div>
@@ -898,7 +926,7 @@
           <div class="ind-item"><span class="ind-name">Pendentes</span><span class="ind-val neutral" id="learn-pend">0</span></div>
         </div>
         <div class="divider"></div>
-        <div style="font-size:11px;color:var(--text3);text-align:center;line-height:1.8">
+        <div class="text-xxs-dim-center">
           Registre resultados clicando nos sinais<br>do histórico para melhorar a precisão
         </div>
       </div>
@@ -908,13 +936,13 @@
 </div>
 
 <!-- ===== MODAL FATORES ===== -->
-<div id="factors-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;overflow-y:auto;padding:20px">
-  <div style="max-width:600px;margin:0 auto;background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+<div id="factors-modal">
+  <div class="modal-inner">
     <div class="card-header">
       <span class="card-title">🌍 Configurar Fatores Externos</span>
       <button class="btn btn-ghost btn-sm" onclick="closeFactorsModal()">✕ Fechar</button>
     </div>
-    <div style="padding:16px" id="factors-modal-content"></div>
+    <div class="pad-16" id="factors-modal-content"></div>
   </div>
 </div>
 

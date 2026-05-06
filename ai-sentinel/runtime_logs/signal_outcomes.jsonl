@@ -1,0 +1,1 @@
+{"signal_id": "ks-test-001", "request_id": null, "asset": "BTCUSDT", "direction": "long", "entry_price": 100.0, "exit_price": 95.0, "pnl_percent": -5.0, "result": "loss", "holding_seconds": null, "closed_at": "2026-04-18T01:09:05.033655Z", "recorded_at": "2026-04-18T01:09:05.033655Z", "timeframe": null, "strategy": null, "model_version": "v1", "extra": {}}

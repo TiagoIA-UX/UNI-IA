@@ -13,29 +13,60 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Backend (FastAPI / AI Agents)
+      # ── Backend (FastAPI / AI Agents) ──────────────────────────────────
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install Python Dependencies
         run: |
           cd ai-sentinel
           pip install -r requirements.txt
-      
-      # Frontend (Next.js / Dashboard)
+
+      # ── Frontend (Next.js / Dashboard) ────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-      
+
       - name: Install Frontend Dependencies
         run: |
           cd zairyx-blog
           npm ci
-      
+
+      # As variáveis NEXT_PUBLIC_* precisam estar disponíveis em build-time.
+      # Adicione os secrets correspondentes em Settings → Secrets do repositório.
       - name: Run Next.js Build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           cd zairyx-blog
           npm run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    # Só faz deploy quando o push for direto na main (não em PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy to Vercel (Production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          cd zairyx-blog
+          vercel --prod --token $VERCEL_TOKEN --yes

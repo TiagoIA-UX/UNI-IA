@@ -1,54 +1,200 @@
-from core.schemas import OpportunityAlert
+import uuid
+from typing import Optional
+
+from core.contract_validation import validate_agent_signal, validate_opportunity_alert
+from core.feature_store import FeatureStore
+from core.outcome_tracker import OutcomeTracker
+from core.regime_engine import RegimeEngine
+from core.schemas import OpportunityAlert, SentinelGovernanceDecision
+from core.sentinel_decision_store import SentinelDecisionStore
+from core.system_state import SystemStateManager
 
 
 class AnalysisService:
-    def analyze(self, asset: str) -> OpportunityAlert:
-        from agents.news_agent import NewsAgent
-        from agents.sentiment_agent import SentimentAgent
-        from agents.macro_agent import MacroAgent
-        from agents.trends_agent import TrendsAgent
-        from agents.technical_agent import TechnicalAgent
-        from agents.fundamentalist_agent import FundamentalistAgent
-        from agents.position_monitor_agent import PositionMonitorAgent
-        from agents.orchestrator_agent import OrchestratorAgent
-        from api.strategy_engine import StrategyEngine
+    """Pipeline de analise com arquitetura nomeada:
+    ATLAS -> ORION -> (legacy agents) -> AEGIS -> SENTINEL -> ARGUS
+    """
 
-        print(f"[{asset}] INICIANDO VARREDURA PROFUNDA UNI IA...")
+    def __init__(
+        self,
+        feature_store: Optional[FeatureStore] = None,
+        outcome_tracker: Optional[OutcomeTracker] = None,
+        system_state: Optional[SystemStateManager] = None,
+        sentinel_store: Optional[SentinelDecisionStore] = None,
+    ):
+        self.feature_store = feature_store or FeatureStore()
+        self.outcome_tracker = outcome_tracker or OutcomeTracker()
+        self.regime_engine = RegimeEngine()
+        self.system_state = system_state
+        self.sentinel_store = sentinel_store or SentinelDecisionStore()
+
+    def _apply_sentinel_governance(self, alert: OpportunityAlert, governance_result: dict) -> OpportunityAlert:
+        alert.governance = SentinelGovernanceDecision(
+            signal_id=str(governance_result["signal_id"]),
+            regime_id=str(governance_result["regime_id"]),
+            regime_version=str(governance_result["regime_version"]),
+            sentinel_decision=str(governance_result["sentinel_decision"]),
+            sentinel_confidence=float(governance_result["sentinel_confidence"]),
+            block_reason_code=str(governance_result["block_reason_code"]),
+            expected_confidence_delta=float(governance_result["expected_confidence_delta"]),
+            approved=bool(governance_result["approved"]),
+            reason_codes=list(governance_result.get("reason_codes", [])),
+            risk_flags=list(governance_result.get("risk_flags", [])),
+        )
+
+        if alert.strategy:
+            alert.strategy.operational_status = (
+                "sentinel_blocked" if alert.governance.sentinel_decision == "block"
+                else "sentinel_downgraded" if alert.governance.sentinel_decision == "downgrade"
+                else alert.strategy.operational_status
+            )
+            alert.strategy.confidence = max(
+                0.0,
+                min(100.0, float(alert.strategy.confidence) + float(alert.governance.expected_confidence_delta)),
+            )
+        if alert.governance.sentinel_decision == "downgrade":
+            alert.score = max(0.0, min(100.0, float(alert.score) + float(alert.governance.expected_confidence_delta)))
+        return alert
+
+    def analyze(self, asset: str, signal_id: Optional[str] = None) -> OpportunityAlert:
+        from agents.atlas_agent import AtlasAgent
+        from agents.macro_agent import MacroAgent
+        from agents.news_agent import NewsAgent
+        from agents.orion_agent import OrionAgent
+        from agents.sentiment_agent import SentimentAgent
+        from agents.trends_agent import TrendsAgent
+        from agents.fundamentalist_agent import FundamentalistAgent
+        from agents.aegis_agent import AegisAgent
+        from agents.argus_agent import ArgusAgent
+        from agents.sentinel_agent import SentinelAgent
+
+        sid = signal_id or str(uuid.uuid4())
+
+        print(f"[{asset}] INICIANDO VARREDURA ZAIRYX IA (signal_id={sid[:8]}...)")
 
         agents_data = []
 
-        macro = MacroAgent().analyze_macro_context(asset)
+        macro = validate_agent_signal(
+            MacroAgent(feature_store=self.feature_store).analyze_macro_context(asset, signal_id=sid),
+            expected_asset=asset,
+        )
         agents_data.append(macro)
-        print(f"[{asset}] Macro OK: {macro.signal_type}")
+        print(f"[{asset}] Macro OK: {macro.signal_type} (conf={macro.confidence})")
 
-        trends = TrendsAgent().analyze_trends(asset)
+        # === ATLAS — Agente Estrutural Tecnico ===
+        atlas = AtlasAgent(feature_store=self.feature_store)
+        atlas_signal = validate_agent_signal(atlas.analyze(asset, signal_id=sid), expected_asset=asset)
+        agents_data.append(atlas_signal)
+        print(f"[{asset}] ATLAS OK: {atlas_signal.signal_type} (conf={atlas_signal.confidence})")
+
+        # === ORION — Agente Cognitivo de Noticias ===
+        orion = OrionAgent(feature_store=self.feature_store)
+        orion_signal = validate_agent_signal(orion.analyze(asset, signal_id=sid), expected_asset=asset)
+        agents_data.append(orion_signal)
+        print(f"[{asset}] ORION OK: {orion_signal.signal_type} (conf={orion_signal.confidence})")
+
+        news_signal = validate_agent_signal(
+            NewsAgent(feature_store=self.feature_store).analyze_news(asset, signal_id=sid),
+            expected_asset=asset,
+        )
+        agents_data.append(news_signal)
+        print(f"[{asset}] News OK: {news_signal.signal_type} (conf={news_signal.confidence})")
+
+        initial_feature_map = self.feature_store.get_signal_feature_map(sid)
+        macro_features = initial_feature_map.get("MacroAgent", {}).get("features", {})
+        atlas_features = initial_feature_map.get("ATLAS", {}).get("features", {})
+        orion_features = initial_feature_map.get("ORION", {}).get("features", {})
+        news_features = initial_feature_map.get("NewsAgent", {}).get("features", {})
+
+        regime_context = self.regime_engine.classify(
+            asset=asset,
+            macro_signal=macro,
+            atlas_signal=atlas_signal,
+            orion_signal=orion_signal,
+            news_signal=news_signal,
+            macro_features=macro_features,
+            atlas_features=atlas_features,
+            orion_features=orion_features,
+            news_features=news_features,
+        )
+        self.feature_store.persist(
+            signal_id=sid,
+            asset=asset,
+            agent_name="REGIME_ENGINE",
+            features={
+                **regime_context.regime_features,
+                "regime_id": regime_context.regime_id,
+                "regime_label": regime_context.regime_label,
+                "regime_version": regime_context.regime_version,
+                "regime_confidence": regime_context.regime_confidence,
+            },
+            metadata={
+                "summary": regime_context.regime_label,
+            },
+        )
+        print(
+            f"[{asset}] REGIME OK: {regime_context.regime_id} "
+            f"(conf={regime_context.regime_confidence})"
+        )
+
+        # === Legacy agents (complementares) ===
+        trends = validate_agent_signal(
+            TrendsAgent(feature_store=self.feature_store).analyze_trends(asset, signal_id=sid),
+            expected_asset=asset,
+        )
         agents_data.append(trends)
         print(f"[{asset}] Trends OK: {trends.signal_type}")
 
-        tech = TechnicalAgent().analyze_technical(asset)
-        agents_data.append(tech)
-        print(f"[{asset}] Technical (Multi-TF) OK: {tech.signal_type}")
-
-        fund = FundamentalistAgent().analyze_fundamentals(asset)
+        fund = validate_agent_signal(
+            FundamentalistAgent(feature_store=self.feature_store).analyze_fundamentals(asset, signal_id=sid),
+            expected_asset=asset,
+        )
         agents_data.append(fund)
-        print(f"[{asset}] Funamentalist OK: {fund.signal_type}")
+        print(f"[{asset}] Fundamentalist OK: {fund.signal_type}")
 
-        news = NewsAgent().analyze_news(asset)
-        agents_data.append(news)
-        print(f"[{asset}] News OK: {news.signal_type}")
+        if not news_signal.raw_data:
+            raise RuntimeError("NewsAgent nao retornou manchetes brutas para o SentimentAgent.")
 
-        senti = SentimentAgent().analyze_sentiment(asset, news.raw_data)
+        senti = validate_agent_signal(
+            SentimentAgent(feature_store=self.feature_store).analyze_sentiment(asset, news_signal.raw_data, signal_id=sid),
+            expected_asset=asset,
+        )
         agents_data.append(senti)
-        print(f"[{asset}] Sentiment/Psico OK: {senti.signal_type}")
+        print(f"[{asset}] Sentiment OK: {senti.signal_type}")
 
-        orchestrator = OrchestratorAgent()
-        alert = orchestrator.analyze_signals(asset, agents_data)
-        strategy_engine = StrategyEngine()
-        alert.strategy = strategy_engine.build_decision(asset, agents_data, alert)
+        # === AEGIS — Fusao Ponderada ===
+        aegis = AegisAgent(feature_store=self.feature_store, outcome_tracker=self.outcome_tracker)
+        alert = validate_opportunity_alert(
+            aegis.fuse(asset, agents_data, signal_id=sid, regime_context=regime_context),
+            expected_asset=asset,
+        )
+        print(f"[{asset}] AEGIS FUSION: score={alert.score} class={alert.classification} dir={alert.strategy.direction if alert.strategy else 'N/A'}")
 
-        guard = PositionMonitorAgent().verify_reversal_risk(alert)
+        sentinel = SentinelAgent(
+            system_state=self.system_state,
+            feature_store=self.feature_store,
+            outcome_tracker=self.outcome_tracker,
+            sentinel_store=self.sentinel_store,
+        )
+        sentinel_result = sentinel.evaluate(alert, signal_id=sid, regime_context=regime_context)
+        sentinel_result["signal_id"] = sid
+        alert = self._apply_sentinel_governance(alert, sentinel_result)
+        alert = validate_opportunity_alert(alert, expected_asset=asset)
+        print(
+            f"[{asset}] SENTINEL: {alert.governance.sentinel_decision} "
+            f"reason={alert.governance.block_reason_code}"
+        )
+
+        if not alert.governance.approved:
+            print(f"[{asset}] PIPELINE BLOQUEADO PELO SENTINEL (signal_id={sid[:8]}...)")
+            return alert
+
+        # === ARGUS — Reversal Check ===
+        argus = ArgusAgent(feature_store=self.feature_store, outcome_tracker=self.outcome_tracker)
+        guard = argus.verify_reversal_risk(alert)
         if guard.get("is_reversal_alert"):
             alert.position_reversal_alert = guard.get("reversal_message")
-            print(f"[{asset}] ALERTA DE REVERSAO DE POSICAO ATIVADO")
+            print(f"[{asset}] ARGUS: ALERTA DE REVERSAO ATIVADO")
 
+        print(f"[{asset}] PIPELINE COMPLETO (signal_id={sid[:8]}...)")
         return alert

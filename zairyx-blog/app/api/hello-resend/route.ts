@@ -1,21 +1,42 @@
 import { Resend } from 'resend';
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { requirePlatformAdminApi } from '@/lib/api-auth';
 
-// Utilizando a credencial (Suposta do Cardápio Digital) 
-// ou o Fallback do Vercel Environment Variables real.
-const resend = new Resend(process.env.RESEND_API_KEY || 're_CHAVEDORESEND_CARDAPIODIGITAL');
+const EmailRequestSchema = z.object({
+  email: z.string().email('O email informado e invalido.'),
+  plan: z.string().trim().min(1).max(60).optional(),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, plan } = await req.json();
-
-    if (!email) {
-      return NextResponse.json({ error: 'O email é obrigatório' }, { status: 400 });
+    const authError = await requirePlatformAdminApi();
+    if (authError) {
+      return authError;
     }
 
-    // Disparo oficial transacional via Resend
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const resendFromEmail = process.env.RESEND_FROM_EMAIL;
+    if (!resendApiKey || !resendFromEmail) {
+      return NextResponse.json(
+        { success: false, error: 'Servico de e-mail nao configurado.' },
+        { status: 503 }
+      );
+    }
+
+    const body = await req.json();
+    const parseResult = EmailRequestSchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Payload invalido.', details: parseResult.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { email, plan } = parseResult.data;
+    const resend = new Resend(resendApiKey);
     const data = await resend.emails.send({
-      from: 'UNI IA <onboarding@zairyx.ia>',
+      from: resendFromEmail,
       to: email,
       subject: `UNI IA - Sua jornada rumo ao plano ${plan || 'PRO'} começou!`,
       html: `

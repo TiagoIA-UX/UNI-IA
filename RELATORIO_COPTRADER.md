@@ -5,6 +5,14 @@
 O coptrader da UNI IA funciona como uma mesa privada assistida por IA.
 Ele não toma decisão apenas por um indicador isolado. Ele cruza múltiplas fontes de contexto e transforma isso em um alerta operacional.
 
+O mandato operacional e Zero Bug:
+
+1. zero comportamento silencioso;
+2. zero fallback operacional;
+3. zero placeholder em produção;
+4. zero execução sem validação;
+5. zero ambiguidade de estado.
+
 Hoje, o fluxo validado é:
 
 1. receber o ativo para análise;
@@ -19,13 +27,27 @@ Hoje, o fluxo validado é:
 O sistema usa os seguintes blocos de análise:
 
 1. Macro: ambiente de risco e contexto geral do mercado.
-2. Tendência e volume: aumento ou queda de interesse no ativo.
-3. Técnico: leitura de preço e múltiplos tempos gráficos.
-4. Fundamentalista: leitura de fundamentos quando aplicável.
-5. Notícias: manchetes e fatos recentes do mercado.
-6. Sentimento: tom emocional e viés das notícias coletadas.
+2. Técnico estrutural: leitura de preço, volatilidade, fluxo, momentum e confluência entre timeframes.
+3. Narrativa: síntese contextual das notícias recentes.
+4. Notícias objetivas: leitura direta do impacto provável das manchetes.
+5. Sentimento: tom emocional e viés das notícias coletadas.
+6. Tendência e volume: aumento ou queda de interesse no ativo.
+7. Fundamentalista: leitura de fundamentos quando aplicável.
 
 Essas leituras são consolidadas em um único alerta final.
+
+## Cadeia operacional ativa
+
+1. MacroAgent enquadra o regime do mercado.
+2. ATLAS valida se a estrutura permite risco.
+3. ORION sintetiza a narrativa do ativo.
+4. NewsAgent resume o impacto factual imediato.
+5. SentimentAgent mede o tom emocional das manchetes.
+6. TrendsAgent separa ativo parado de ativo ganhando tração.
+7. FundamentalistAgent adiciona proteção de capital quando o fundamento faz sentido.
+8. AEGIS funde as leituras em score, classificação e direção.
+9. SENTINEL aplica score mínimo, risco, drawdown, sequência de perdas e estado do sistema.
+10. ARGUS monitora reversão, acompanha posição e registra outcome real.
 
 ## O que o sistema entrega
 

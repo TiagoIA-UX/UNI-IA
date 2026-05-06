@@ -1,7 +1,12 @@
 # Node/Next
 node_modules/
 .next/
+zairyx-blog/.next/
 zairyx-blog/.vercel/
+
+# Python
+__pycache__/
+*.py[cod]
 
 # Environment secrets
 .env

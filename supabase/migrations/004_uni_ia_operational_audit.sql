@@ -1,32 +1,37 @@
--- ===== TABLE: UNI IA OPERATIONAL AUDIT =====
-CREATE TABLE IF NOT EXISTS uni_ia_operational_audit (
+-- ===== TABLE: UNI IA DESK REQUESTS =====
+-- Armazena ordens pendentes de aprovação manual da Mesa Privada.
+-- Inserção e leitura realizadas exclusivamente pelo backend (service_role).
+CREATE TABLE IF NOT EXISTS uni_ia_desk_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    event_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'ai-sentinel',
-    asset TEXT,
-    request_id TEXT,
-    classification TEXT,
-    score NUMERIC,
-    details JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    request_id TEXT NOT NULL UNIQUE,
+    asset TEXT NOT NULL,
+    score NUMERIC NOT NULL,
+    classification TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN ('pending_approval', 'executed', 'rejected')
+    ),
+    alert JSONB NOT NULL DEFAULT '{}'::jsonb,
+    execution JSONB,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    executed_at TIMESTAMPTZ,
+    rejected_at TIMESTAMPTZ
 );
-
-CREATE INDEX IF NOT EXISTS idx_uni_ia_operational_audit_created_at ON uni_ia_operational_audit(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_uni_ia_operational_audit_event_type ON uni_ia_operational_audit(event_type);
-CREATE INDEX IF NOT EXISTS idx_uni_ia_operational_audit_request_id ON uni_ia_operational_audit(request_id);
-CREATE INDEX IF NOT EXISTS idx_uni_ia_operational_audit_asset ON uni_ia_operational_audit(asset);
-
-ALTER TABLE uni_ia_operational_audit ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Clientes autenticados podem ver auditoria operacional" ON uni_ia_operational_audit;
-CREATE POLICY "Clientes autenticados podem ver auditoria operacional"
-ON uni_ia_operational_audit FOR SELECT
-TO authenticated
-USING (true);
-
-DROP POLICY IF EXISTS "Servidor IA insere auditoria operacional" ON uni_ia_operational_audit;
-CREATE POLICY "Servidor IA insere auditoria operacional"
-ON uni_ia_operational_audit FOR INSERT
-TO service_role
-WITH CHECK (true);
+-- Índices para consultas operacionais da mesa
+CREATE INDEX IF NOT EXISTS idx_uni_ia_desk_requests_status ON uni_ia_desk_requests(status);
+CREATE INDEX IF NOT EXISTS idx_uni_ia_desk_requests_created_at ON uni_ia_desk_requests(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_uni_ia_desk_requests_asset ON uni_ia_desk_requests(asset);
+-- Trigger para manter updated_at sincronizado
+CREATE OR REPLACE FUNCTION uni_ia_set_updated_at() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW();
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER trg_uni_ia_desk_requests_updated_at BEFORE
+UPDATE ON uni_ia_desk_requests FOR EACH ROW EXECUTE FUNCTION uni_ia_set_updated_at();
+-- ===== RLS: UNI IA DESK REQUESTS =====
+-- Apenas o servidor IA (service_role) pode ler, inserir e modificar.
+-- Usuários autenticados NÃO têm acesso direto — controle via API interna.
+ALTER TABLE uni_ia_desk_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Servidor IA gerencia desk requests" ON uni_ia_desk_requests;
+CREATE POLICY "Servidor IA gerencia desk requests" ON uni_ia_desk_requests FOR ALL TO service_role USING (true) WITH CHECK (true);

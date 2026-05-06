@@ -14,6 +14,14 @@ class UniIATelegramBot:
         self.timeout_seconds = float(os.getenv("TELEGRAM_TIMEOUT_SECONDS", "10"))
         self.max_retries = int(os.getenv("TELEGRAM_MAX_RETRIES", "3"))
 
+    def configured(self) -> bool:
+        return bool(
+            self.free_bot_token
+            and self.premium_bot_token
+            and self.free_channel_id
+            and self.premium_channel_id
+        )
+
     def _validate_config(self):
         missing = []
         if not self.free_bot_token:
@@ -80,6 +88,7 @@ class UniIATelegramBot:
         classification_badges = {
             "RISCO": "🔴 RISCO",
             "ATENÇÃO": "🟠 ATENCAO",
+            "ATENCAO": "🟠 ATENCAO",
             "OPORTUNIDADE": "🟢 OPORTUNIDADE",
         }
         badge = classification_badges.get(alert.classification, f"⚪ {alert.classification}")

@@ -13,18 +13,31 @@ class GroqClient:
             print("Aviso: GROQ_API_KEY não encontrada no ambiente.")
         self.client = Groq(api_key=self.api_key)
         self.model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+        self.force_json_mode = os.getenv("GROQ_FORCE_JSON_MODE", "true").strip().lower() == "true"
         
     def generate_response(self, system_prompt: str, user_prompt: str) -> str:
         """Gera uma resposta baseada na API do Groq."""
+        if not self.api_key:
+            raise RuntimeError("GROQ_API_KEY ausente no ambiente.")
+
         try:
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            payload = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.2, # Baixa temperatura para respostas mais analíticas e seguras
-            )
-            return completion.choices[0].message.content
+                # Baixa temperatura para respostas mais analíticas e seguras.
+                "temperature": 0.2,
+            }
+
+            if self.force_json_mode:
+                payload["response_format"] = {"type": "json_object"}
+
+            completion = self.client.chat.completions.create(**payload)
+            content = completion.choices[0].message.content
+            if not content:
+                raise RuntimeError("Resposta vazia da Groq API.")
+            return content
         except Exception as e:
-            return f"Erro ao comunicar com Groq API: {str(e)}"
+            raise RuntimeError(f"Falha ao comunicar com Groq API: {str(e)}") from e

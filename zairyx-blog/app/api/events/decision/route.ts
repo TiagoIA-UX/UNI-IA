@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requirePlatformAdminApi } from '@/lib/api-auth';
 
 type EventRow = {
   event: string;
@@ -45,6 +46,11 @@ function buildMetrics(rows: EventRow[]) {
 
 export async function GET(req: NextRequest) {
   try {
+    const authError = await requirePlatformAdminApi();
+    if (authError) {
+      return authError;
+    }
+
     const page = req.nextUrl.searchParams.get('page') || 'planos';
     const days = Number(req.nextUrl.searchParams.get('days') || '30');
     const minViews = Number(req.nextUrl.searchParams.get('minViews') || '100');

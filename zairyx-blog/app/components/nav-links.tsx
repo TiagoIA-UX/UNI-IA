@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { resolveLocale } from '@/lib/i18n';
+import styles from './nav-links.module.css';
 
 type NavLinksProps = {
   variant: 'header' | 'footer';
@@ -26,13 +27,13 @@ export default function NavLinks({ variant }: NavLinksProps) {
   if (variant === 'footer') {
     return (
       <>
-        <a href={linkFor('/privacy')} style={{ color: '#cbd5e1', textDecoration: 'none', marginRight: '0.7rem' }}>
+        <a href={linkFor('/privacy')} className={`${styles.link} ${styles.footerLink}`}>
           Privacy Policy
         </a>
-        <a href={linkFor('/risk-disclosure')} style={{ color: '#cbd5e1', textDecoration: 'none', marginRight: '0.7rem' }}>
+        <a href={linkFor('/risk-disclosure')} className={`${styles.link} ${styles.footerLink}`}>
           Risk Disclosure
         </a>
-        <a href={linkFor('/termos')} style={{ color: '#cbd5e1', textDecoration: 'none' }}>
+        <a href={linkFor('/termos')} className={`${styles.link} ${styles.footerLinkLast}`}>
           Terms
         </a>
       </>
@@ -41,25 +42,25 @@ export default function NavLinks({ variant }: NavLinksProps) {
 
   return (
     <>
-      <a href={linkFor('/')} style={{ color: pathname === '/' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+      <a href={linkFor('/')} className={`${styles.link} ${pathname === '/' ? styles.navLinkActive : styles.navLink}`}>
         Home
       </a>
-      <a href={linkFor('/acesso')} style={{ color: pathname === '/acesso' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+      <a href={linkFor('/acesso')} className={`${styles.link} ${pathname === '/acesso' ? styles.navLinkActive : styles.navLink}`}>
         Access
       </a>
-      <a href={linkFor('/plataforma')} style={{ color: pathname === '/plataforma' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+      <a href={linkFor('/plataforma')} className={`${styles.link} ${pathname === '/plataforma' ? styles.navLinkActive : styles.navLink}`}>
         Platform
       </a>
-      <a href={linkFor('/planos')} style={{ color: pathname === '/planos' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+      <a href={linkFor('/planos')} className={`${styles.link} ${pathname === '/planos' ? styles.navLinkActive : styles.navLink}`}>
         Pricing
       </a>
-      <a href={linkFor('/termos')} style={{ color: pathname === '/termos' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+      <a href={linkFor('/termos')} className={`${styles.link} ${pathname === '/termos' ? styles.navLinkActive : styles.navLink}`}>
         Terms
       </a>
-      <a href={linkFor('/privacy')} style={{ color: pathname === '/privacy' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+      <a href={linkFor('/privacy')} className={`${styles.link} ${pathname === '/privacy' ? styles.navLinkActive : styles.navLink}`}>
         Privacy
       </a>
-      <a href={linkFor('/risk-disclosure')} style={{ color: pathname === '/risk-disclosure' ? '#22d3ee' : '#e2e8f0', textDecoration: 'none' }}>
+      <a href={linkFor('/risk-disclosure')} className={`${styles.link} ${pathname === '/risk-disclosure' ? styles.navLinkActive : styles.navLink}`}>
         Risk
       </a>
     </>

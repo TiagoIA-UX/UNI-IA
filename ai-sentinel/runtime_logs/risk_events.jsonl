@@ -1,0 +1,1 @@
+{"event": "kill_switch_triggered", "timestamp": "2026-04-18T01:09:05.977973Z", "reasons": ["daily_loss_limit_reached:-5.000000%<=-3.000000%"], "metrics": {"total_pnl_pct": -5.0, "max_drawdown_pct": 5.0}, "window_days": 1}

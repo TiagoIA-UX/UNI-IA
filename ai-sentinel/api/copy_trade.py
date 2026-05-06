@@ -3,9 +3,64 @@ import json
 import hmac
 import time
 import hashlib
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import requests
+import yfinance as yf
 from core.schemas import OpportunityAlert
+
+
+# ===== ATR-BASED STOP LOSS =====
+# Mapeamento de symbols Bybit (linear) → yfinance
+_BYBIT_TO_YF: Dict[str, str] = {
+    "BTCUSDT": "BTC-USD",
+    "ETHUSDT": "ETH-USD",
+    "SOLUSDT": "SOL-USD",
+    "XRPUSDT": "XRP-USD",
+    "BNBUSDT": "BNB-USD",
+    "ADAUSDT": "ADA-USD",
+    "DOGEUSDT": "DOGE-USD",
+    "AVAXUSDT": "AVAX-USD",
+    "LTCUSDT": "LTC-USD",
+    "DOTUSDT": "DOT-USD",
+}
+
+
+def _compute_atr_sl(symbol: str, side: str) -> Optional[float]:
+    """Calcula o preco de Stop Loss baseado em ATR real (sem pandas).
+
+    Variaveis de ambiente:
+    - ATR_SL_ENABLED   (default true)  — desabilita o calculo se false
+    - ATR_SL_MULTIPLIER (default 1.5)  — fator sobre o ATR
+    - ATR_SL_PERIOD    (default 14)    — janela do ATR em barras de 1h
+
+    Retorna o preco do SL ou None se nao for possivel calcular.
+    """
+    if os.getenv("ATR_SL_ENABLED", "true").lower() != "true":
+        return None
+    try:
+        multiplier = float(os.getenv("ATR_SL_MULTIPLIER", "1.5"))
+        period = int(os.getenv("ATR_SL_PERIOD", "14"))
+        yf_sym = _BYBIT_TO_YF.get(symbol.upper(), symbol)
+        hist = yf.Ticker(yf_sym).history(period=f"{period + 2}d", interval="1h")
+        if hist.empty or len(hist) < period + 1:
+            return None
+        highs = hist["High"].tolist()
+        lows = hist["Low"].tolist()
+        closes = hist["Close"].tolist()
+        trs = [
+            max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+            for i in range(1, len(closes))
+        ]
+        atr = sum(trs[-period:]) / period
+        price = closes[-1]
+        sl = price - atr * multiplier if side.upper() == "BUY" else price + atr * multiplier
+        return round(sl, 4)
+    except Exception:
+        return None
 
 
 class GenericBrokerAdapter:
@@ -184,6 +239,11 @@ class BybitBrokerAdapter:
             "timeInForce": "IOC",
             "orderLinkId": f"uniia-{int(time.time())}",
         }
+        atr_sl = _compute_atr_sl(order_symbol, side)
+        if atr_sl is not None:
+            bybit_payload["stopLoss"] = str(round(atr_sl, 2))
+            bybit_payload["slTriggerBy"] = "MarkPrice"
+            bybit_payload["slOrderType"] = "Market"
         payload_json = json.dumps(bybit_payload, separators=(",", ":"))
         sign = self._sign(timestamp, payload_json)
 

@@ -1,5 +1,16 @@
+
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, List, Optional
+
+
+def model_to_dict(model: Any) -> dict:
+    if model is None:
+        return {}
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    if hasattr(model, "dict"):
+        return model.dict()
+    raise TypeError(f"Objeto nao suportado para serializacao: {type(model)!r}")
 
 class AgentSignal(BaseModel):
     """Sinal individual emitido por um dos agentes base"""
@@ -19,6 +30,23 @@ class StrategyDecision(BaseModel):
     operational_status: str
     reasons: List[str]
     execution_hint: Optional[str] = None
+    regime_id: Optional[str] = None
+    regime_label: Optional[str] = None
+    regime_version: Optional[str] = None
+    regime_confidence: Optional[float] = None
+
+
+class SentinelGovernanceDecision(BaseModel):
+    signal_id: str
+    regime_id: str
+    regime_version: str
+    sentinel_decision: str
+    sentinel_confidence: float
+    block_reason_code: str
+    expected_confidence_delta: float
+    approved: bool
+    reason_codes: List[str]
+    risk_flags: List[str]
 
 class OpportunityAlert(BaseModel):
     """Alerta final consolidado pelo OrchestratorAgent"""
@@ -29,3 +57,4 @@ class OpportunityAlert(BaseModel):
     sources: List[str]
     position_reversal_alert: Optional[str] = None # Alerta de proteção de posições abertas
     strategy: Optional[StrategyDecision] = None
+    governance: Optional[SentinelGovernanceDecision] = None

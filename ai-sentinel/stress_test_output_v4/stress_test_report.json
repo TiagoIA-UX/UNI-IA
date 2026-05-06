@@ -1,0 +1,66 @@
+{
+  "experiment": {
+    "dataset": "sample_extreme_backtest.csv",
+    "strategy": "tests.sample_stress_strategy:generate_signal",
+    "capital_initial": 10000.0,
+    "criteria": {
+      "drawdown_reduction_threshold_pct": 20.0,
+      "net_profit_max_decline_pct": 10.0
+    }
+  },
+  "scenario_A": {
+    "risk_filter": "ON",
+    "metrics": {
+      "total_trades": 2,
+      "wins": 0,
+      "losses": 2,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "avg_rr": -1.1477,
+      "max_drawdown": 228.22035509,
+      "max_drawdown_pct": 2.2822,
+      "sharpe_ratio": -121.6816,
+      "expectancy": -114.11017754,
+      "longest_losing_streak": 2,
+      "net_profit": -228.22035509
+    },
+    "governance": {
+      "total_signals": 10,
+      "signals_blocked_by_risk": 8,
+      "signals_reduced_by_risk": 0,
+      "discipline_ratio": 0.8,
+      "capital_protected_estimate": 781.74237159
+    }
+  },
+  "scenario_B": {
+    "risk_filter": "OFF",
+    "metrics": {
+      "total_trades": 10,
+      "wins": 0,
+      "losses": 10,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "avg_rr": -1.1458,
+      "max_drawdown": 1088.45846257,
+      "max_drawdown_pct": 10.8846,
+      "sharpe_ratio": -93.0764,
+      "expectancy": -108.84584626,
+      "longest_losing_streak": 10,
+      "net_profit": -1088.45846257
+    },
+    "governance": {
+      "total_signals": 10,
+      "signals_blocked_by_risk": 0,
+      "signals_reduced_by_risk": 0,
+      "discipline_ratio": 0.0,
+      "capital_protected_estimate": 0.0
+    }
+  },
+  "comparison": {
+    "drawdown_delta_pct": -79.0328,
+    "drawdown_reduction_pct": 79.0328,
+    "net_profit_delta_pct": 79.0327,
+    "capital_protected": 781.74237159,
+    "classification": "RISK_FILTER_PROTECTIVE"
+  }
+}

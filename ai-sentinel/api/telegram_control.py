@@ -6,9 +6,16 @@ from typing import Dict, List, Optional
 
 import requests
 
+from core.feedback_store import FeedbackStore
+from core.reward_model import RewardModel
+from core.weight_optimizer import WeightOptimizer
+
 
 class TelegramControlService:
     def __init__(self, telegram_bot, private_desk, signal_scanner, copy_trade_service):
+        self._feedback_store = FeedbackStore()
+        self._weight_optimizer = WeightOptimizer()
+        self._reward_model = RewardModel(feedback_store=self._feedback_store)
         self.telegram_bot = telegram_bot
         self.private_desk = private_desk
         self.signal_scanner = signal_scanner
@@ -136,6 +143,10 @@ class TelegramControlService:
             return self._approve_message(args)
         if command == "/reject":
             return self._reject_message(args)
+        if command == "/feedback":
+            return self._feedback_message(args)
+        if command == "/weights":
+            return self._weights_message()
         if command == "/cycle":
             result = self.signal_scanner.run_cycle()
             return "\n".join(
@@ -156,6 +167,8 @@ class TelegramControlService:
             "/approve <request_id> - aprova e executa a ordem",
             "/reject <request_id> [motivo] - rejeita a ordem",
             "/cycle - roda um ciclo imediato do scanner",
+            "/feedback <signal_id> bom|ruim [comentario] - avalia um sinal",
+            "/weights - exibe pesos calibrados dos agentes",
         ]
         return "\n".join(lines)
 
@@ -222,3 +235,62 @@ class TelegramControlService:
                 f"Motivo: {result.get('reason')}",
             ]
         )
+
+    def _feedback_message(self, args: List[str]) -> str:
+        """Registra feedback humano para um sinal: /feedback <signal_id> bom|ruim [comentario]"""
+        if len(args) < 2:
+            return "Uso: /feedback <signal_id> bom|ruim [comentario]"
+        signal_id = args[0]
+        rating_raw = args[1].lower().strip()
+        comment = " ".join(args[2:]).strip() or None
+
+        rating_map = {"bom": "positive", "ruim": "negative", "positive": "positive", "negative": "negative"}
+        rating = rating_map.get(rating_raw)
+        if rating is None:
+            return "Rating invalido. Use: bom ou ruim"
+
+        reviewer_id = self._last_seen_user_id
+        try:
+            self._feedback_store.record_feedback(
+                signal_id=signal_id,
+                rating=rating,
+                source="telegram",
+                reviewer_id=reviewer_id,
+                comment=comment,
+            )
+            # Recalibrar pesos apos novo feedback
+            agent_stats = self._reward_model.compute_agent_stats()
+            self._weight_optimizer.update_from_agent_stats(agent_stats)
+
+            emoji = "👍" if rating == "positive" else "👎"
+            lines = [
+                f"*Feedback registrado* {emoji}",
+                f"Sinal: {signal_id}",
+                f"Avaliacao: {rating_raw}",
+            ]
+            if comment:
+                lines.append(f"Comentario: {comment}")
+            lines.append("Pesos dos agentes recalibrados.")
+            return "\n".join(lines)
+        except ValueError as err:
+            return f"Erro ao registrar feedback: {err}"
+
+    def _weights_message(self) -> str:
+        """Exibe pesos calibrados atuais dos agentes."""
+        status = self._weight_optimizer.status()
+        weights = status.get("weights", {})
+        updated_at = status.get("updated_at") or "nunca"
+
+        sorted_weights = sorted(weights.items(), key=lambda x: x[1], reverse=True)
+        lines = ["*Pesos dos Agentes (RLHF)*"]
+        for agent, w in sorted_weights:
+            bar = "▓" * int(w * 4) + "░" * max(0, 10 - int(w * 4))
+            lines.append(f"{bar} {agent}: {w:.2f}")
+        lines.append(f"\nAtualizado: {updated_at}")
+
+        fb_stats = self._feedback_store.stats()
+        total = fb_stats.get("total", 0)
+        if total > 0:
+            pos_rate = fb_stats.get("positive_rate", 0)
+            lines.append(f"Feedbacks coletados: {total} ({pos_rate*100:.0f}% positivos)")
+        return "\n".join(lines)

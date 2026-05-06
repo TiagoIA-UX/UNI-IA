@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requirePlatformAdminApi } from '@/lib/api-auth';
 
 type EventRow = {
   event: string;
@@ -9,6 +10,11 @@ type EventRow = {
 
 export async function GET(req: NextRequest) {
   try {
+    const authError = await requirePlatformAdminApi();
+    if (authError) {
+      return authError;
+    }
+
     const page = req.nextUrl.searchParams.get('page') || 'planos';
     const days = Number(req.nextUrl.searchParams.get('days') || '30');
     const from = new Date(Date.now() - Math.max(days, 1) * 24 * 60 * 60 * 1000).toISOString();

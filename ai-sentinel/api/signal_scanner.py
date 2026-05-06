@@ -1,22 +1,30 @@
 import os
+import json
 import threading
 import time
-from datetime import datetime
+import uuid
+from collections import deque
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List
 
-from core.schemas import OpportunityAlert
+from core.contract_validation import normalize_classification
+from core.execution_integrity import ExecutionIntegrityError
+from core.schemas import OpportunityAlert, model_to_dict
 
 
 def _utcnow_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class SignalScanner:
-    def __init__(self, analysis_service, telegram_bot, private_desk, audit_service=None):
+    def __init__(self, analysis_service, telegram_bot, private_desk, audit_service=None, system_state=None, integrity_guard=None):
         self.analysis_service = analysis_service
         self.telegram_bot = telegram_bot
         self.private_desk = private_desk
         self.audit_service = audit_service
+        self.system_state = system_state
+        self.integrity_guard = integrity_guard
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._thread = None
@@ -27,6 +35,159 @@ class SignalScanner:
         self._last_results: List[Dict[str, Any]] = []
         self._recent_alerts: List[Dict[str, Any]] = []
         self._dedupe_cache: Dict[str, float] = {}
+        self._dispatch_log_lock = threading.Lock()
+        self._dispatch_log_path = self._resolve_dispatch_log_path()
+
+    def _resolve_dispatch_log_path(self) -> Path:
+        configured_path = os.getenv("SIGNAL_DISPATCH_LOG_PATH", "")
+        if configured_path:
+            return Path(configured_path).expanduser().resolve()
+        return (Path(__file__).resolve().parents[1] / "runtime_logs" / "signal_dispatch.jsonl").resolve()
+
+    def _append_dispatch_log(self, payload: Dict[str, Any]):
+        try:
+            with self._dispatch_log_lock:
+                self._dispatch_log_path.parent.mkdir(parents=True, exist_ok=True)
+                with self._dispatch_log_path.open("a", encoding="utf-8") as fp:
+                    fp.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except Exception as err:
+            self._last_error = str(err)
+
+    def _iter_dispatch_events(self, limit: int = 1000):
+        max_items = max(int(limit), 1)
+        if not self._dispatch_log_path.exists():
+            return
+        with self._dispatch_log_path.open("r", encoding="utf-8") as fp:
+            tail = deque(fp, maxlen=max_items)
+        for raw_line in tail:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(payload, dict):
+                yield payload
+
+    def get_recent_dispatch_events(
+        self,
+        *,
+        limit: int = 50,
+        status: str | None = None,
+        asset: str | None = None,
+    ) -> Dict[str, Any]:
+        normalized_status = status.lower().strip() if status else None
+        normalized_asset = asset.upper().strip() if asset else None
+        cap = max(min(int(limit), 500), 1)
+        source_limit = max(cap * 10, 200)
+
+        rows: List[Dict[str, Any]] = []
+        for event in self._iter_dispatch_events(limit=source_limit):
+            if normalized_status and str(event.get("status", "")).lower() != normalized_status:
+                continue
+            if normalized_asset and str(event.get("asset", "")).upper() != normalized_asset:
+                continue
+            rows.append(event)
+
+        rows = rows[-cap:]
+        rows.reverse()
+        return {
+            "success": True,
+            "count": len(rows),
+            "filters": {
+                "limit": cap,
+                "status": normalized_status,
+                "asset": normalized_asset,
+            },
+            "items": rows,
+        }
+
+    def get_dispatch_metrics(self, *, window_minutes: int = 1440, sample_limit: int = 5000) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        window = max(int(window_minutes), 1)
+        sample_cap = max(int(sample_limit), 100)
+        cutoff_ts = now.timestamp() - (window * 60)
+
+        considered = []
+        for event in self._iter_dispatch_events(limit=sample_cap):
+            ts_raw = event.get("timestamp")
+            try:
+                event_ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp()
+            except Exception:
+                continue
+            if event_ts >= cutoff_ts:
+                considered.append(event)
+
+        total = len(considered)
+        sent = sum(1 for item in considered if str(item.get("status", "")).lower() == "sent")
+        failed = sum(1 for item in considered if str(item.get("status", "")).lower() == "failed")
+        blocked = sum(1 for item in considered if str(item.get("status", "")).lower() == "blocked")
+
+        def _pct(value: int) -> float:
+            return round((value / total * 100.0), 4) if total else 0.0
+
+        by_asset: Dict[str, Dict[str, int]] = {}
+        for item in considered:
+            key = str(item.get("asset", "UNKNOWN")).upper()
+            bucket = by_asset.setdefault(key, {"total": 0, "sent": 0, "failed": 0, "blocked": 0})
+            bucket["total"] += 1
+            state = str(item.get("status", "")).lower()
+            if state in bucket:
+                bucket[state] += 1
+
+        return {
+            "success": True,
+            "window_minutes": window,
+            "sample_limit": sample_cap,
+            "generated_at": _utcnow_iso(),
+            "totals": {
+                "events": total,
+                "sent": sent,
+                "failed": failed,
+                "blocked": blocked,
+            },
+            "rates": {
+                "sent_percent": _pct(sent),
+                "failed_percent": _pct(failed),
+                "blocked_percent": _pct(blocked),
+            },
+            "by_asset": by_asset,
+        }
+
+    def _record_dispatch_event(
+        self,
+        *,
+        signal_id: str,
+        status: str,
+        alert: OpportunityAlert,
+        scanner_result: Dict[str, Any],
+        preview: Dict[str, Any] | None = None,
+        telegram: Dict[str, Any] | None = None,
+        desk: Dict[str, Any] | None = None,
+        error: str | None = None,
+    ):
+        strategy = alert.strategy
+        payload = {
+            "signal_id": signal_id,
+            "timestamp": _utcnow_iso(),
+            "asset": alert.asset,
+            "classification": alert.classification,
+            "score": float(alert.score),
+            "timeframe": strategy.timeframe if strategy else None,
+            "strategy": strategy.mode if strategy else None,
+            "mandate": {
+                "desk_mode": (preview or {}).get("mode"),
+                "action": (preview or {}).get("action"),
+                "operational_status": (preview or {}).get("operational_status"),
+            },
+            "status": status,
+            "scanner_result": scanner_result,
+            "telegram": telegram or {},
+            "desk": desk or {},
+            "error": error,
+        }
+        self._append_dispatch_log(payload)
 
     def _cfg(self) -> Dict[str, Any]:
         assets_raw = os.getenv("SIGNAL_SCAN_ASSETS", "")
@@ -44,6 +205,7 @@ class SignalScanner:
             "allowed_classifications": allowed_classifications,
             "dedupe_ttl_seconds": max(float(os.getenv("SIGNAL_DEDUPE_TTL_SECONDS", "300")), 30.0),
             "recent_limit": max(int(os.getenv("SIGNAL_RECENT_LIMIT", "20")), 5),
+            "session_filter_enabled": os.getenv("SIGNAL_SESSION_FILTER_ENABLED", "false").lower() == "true",
         }
 
     def _prune_dedupe_cache(self, ttl_seconds: float):
@@ -85,12 +247,44 @@ class SignalScanner:
         self._recent_alerts.insert(0, item)
         self._recent_alerts = self._recent_alerts[:recent_limit]
 
+    def _is_in_trading_session(self) -> bool:
+        """Retorna True se o horario UTC atual estiver numa janela de alta liquidez.
+
+        Janelas (UTC):
+        - Sessao asiatica:   00:00 - 04:00  (crypto: maior volatilidadé asiatica)
+        - London open:       07:00 - 10:00
+        - NY open + overlap: 13:00 - 17:00
+        """
+        hour = datetime.now(timezone.utc).hour
+        WINDOWS = [(0, 4), (7, 10), (13, 17)]
+        return any(start <= hour < end for start, end in WINDOWS)
+
     def _is_eligible(self, alert: OpportunityAlert, cfg: Dict[str, Any]) -> bool:
         if float(alert.score) < cfg["min_score"]:
             return False
-        if cfg["allowed_classifications"] and alert.classification.upper() not in cfg["allowed_classifications"]:
+        if cfg["allowed_classifications"] and normalize_classification(alert.classification) not in cfg["allowed_classifications"]:
             return False
         return True
+
+    def _strict_operational_mode(self) -> bool:
+        if self.system_state:
+            return self.system_state.mode.value in {"approval", "live"}
+        return os.getenv("UNI_IA_MODE", "paper").lower() in {"approval", "live"}
+
+    def _dispatch_telegram(self, alert: OpportunityAlert, preview: Dict[str, Any]) -> Dict[str, Any]:
+        if self._strict_operational_mode():
+            self.telegram_bot.dispatch_alert(alert, operational_context=preview)
+            return {"success": True, "dispatched": True}
+
+        try:
+            self.telegram_bot.dispatch_alert(alert, operational_context=preview)
+            return {"success": True, "dispatched": True}
+        except Exception as telegram_error:
+            return {
+                "success": False,
+                "dispatched": False,
+                "error": str(telegram_error),
+            }
 
     def configured(self) -> bool:
         return len(self._cfg()["assets"]) > 0
@@ -130,6 +324,7 @@ class SignalScanner:
         return {
             "running": self.is_running(),
             "configured": self.configured(),
+            "system": self.system_state.snapshot() if self.system_state else None,
             "config": cfg,
             "cycle_count": self._cycle_count,
             "last_cycle_started_at": self._last_cycle_started_at,
@@ -137,26 +332,31 @@ class SignalScanner:
             "last_error": self._last_error,
             "last_results": self._last_results,
             "recent_alerts": self._recent_alerts,
+            "dispatch_log_path": str(self._dispatch_log_path),
         }
 
     def _dispatch_alert(self, alert: OpportunityAlert) -> Dict[str, Any]:
-        preview = self.private_desk.preview_action(alert)
-        telegram_result = {"success": True, "dispatched": True}
+        stage = "integrity_guard"
         try:
-            self.telegram_bot.dispatch_alert(alert, operational_context=preview)
-        except Exception as telegram_error:
-            telegram_result = {
-                "success": False,
-                "dispatched": False,
-                "error": str(telegram_error),
-            }
+            if self.integrity_guard is not None:
+                self.integrity_guard.validate_dispatch_ready(alert)
 
-        desk_result = self.private_desk.handle_alert(alert)
-        return {
-            "preview": preview,
-            "telegram": telegram_result,
-            "desk": desk_result,
-        }
+            stage = "desk_preview"
+            preview = self.private_desk.preview_action(alert)
+
+            stage = "telegram_dispatch"
+            telegram_result = self._dispatch_telegram(alert, preview)
+
+            stage = "desk_dispatch"
+            desk_result = self.private_desk.handle_alert(alert)
+            return {
+                "preview": preview,
+                "telegram": telegram_result,
+                "desk": desk_result,
+            }
+        except Exception as err:
+            setattr(err, "signal_scanner_stage", stage)
+            raise
 
     def _audit(self, event_type: str, status: str, **payload):
         if not self.audit_service:
@@ -168,22 +368,94 @@ class SignalScanner:
 
     def scan_asset(self, asset: str) -> Dict[str, Any]:
         cfg = self._cfg()
+        signal_id = str(uuid.uuid4())
+        if self.system_state and not self.system_state.can_generate_signal():
+            blocked_result = {
+                "asset": asset.upper(),
+                "classification": "BLOCKED",
+                "score": 0,
+                "dispatched": False,
+                "desk_action": "blocked",
+                "reason": f"sistema_{self.system_state.status.value}",
+                "signal_id": signal_id,
+            }
+            self._append_dispatch_log(
+                {
+                    "signal_id": signal_id,
+                    "timestamp": _utcnow_iso(),
+                    "asset": asset.upper(),
+                    "classification": "BLOCKED",
+                    "score": 0.0,
+                    "timeframe": None,
+                    "strategy": None,
+                    "mandate": {},
+                    "status": "blocked",
+                    "scanner_result": blocked_result,
+                    "telegram": {},
+                    "desk": {},
+                    "error": blocked_result["reason"],
+                }
+            )
+            return blocked_result
+        if cfg.get("session_filter_enabled") and not self._is_in_trading_session():
+            skipped_result = {
+                "asset": asset.upper(),
+                "classification": "SKIPPED",
+                "score": 0,
+                "dispatched": False,
+                "desk_action": "ignored",
+                "reason": "fora_da_janela_de_sessao",
+                "signal_id": signal_id,
+            }
+            self._append_dispatch_log(
+                {
+                    "signal_id": signal_id,
+                    "timestamp": _utcnow_iso(),
+                    "asset": asset.upper(),
+                    "classification": "SKIPPED",
+                    "score": 0.0,
+                    "timeframe": None,
+                    "strategy": None,
+                    "mandate": {},
+                    "status": "blocked",
+                    "scanner_result": skipped_result,
+                    "telegram": {},
+                    "desk": {},
+                    "error": skipped_result["reason"],
+                }
+            )
+            return skipped_result
         try:
-            alert = self.analysis_service.analyze(asset)
+            alert = self.analysis_service.analyze(asset, signal_id=signal_id)
             result: Dict[str, Any] = {
                 "asset": asset.upper(),
                 "classification": alert.classification,
                 "score": alert.score,
                 "dispatched": False,
                 "desk_action": "ignored",
+                "signal_id": signal_id,
             }
 
             if not self._is_eligible(alert, cfg):
                 result["reason"] = "fora_do_filtro"
+                self._record_dispatch_event(
+                    signal_id=signal_id,
+                    status="blocked",
+                    alert=alert,
+                    scanner_result=result,
+                    error=result["reason"],
+                )
                 return result
 
             if self._is_duplicate(alert, cfg["dedupe_ttl_seconds"]):
                 result["reason"] = "duplicado_no_intervalo"
+                self._record_dispatch_event(
+                    signal_id=signal_id,
+                    status="blocked",
+                    alert=alert,
+                    scanner_result=result,
+                    error=result["reason"],
+                )
                 return result
 
             dispatch_result = self._dispatch_alert(alert)
@@ -192,6 +464,17 @@ class SignalScanner:
             if dispatch_result["desk"].get("request_id"):
                 result["request_id"] = dispatch_result["desk"]["request_id"]
             result["operational_status"] = dispatch_result["preview"].get("operational_status")
+            dispatch_status = "sent" if result["dispatched"] else "failed"
+            self._record_dispatch_event(
+                signal_id=signal_id,
+                status=dispatch_status,
+                alert=alert,
+                scanner_result=result,
+                preview=dispatch_result["preview"],
+                telegram=dispatch_result["telegram"],
+                desk=dispatch_result["desk"],
+                error=dispatch_result["telegram"].get("error"),
+            )
             self._audit(
                 "signal.generated",
                 "success",
@@ -201,9 +484,10 @@ class SignalScanner:
                 score=float(alert.score),
                 details={
                     "scanner_result": result,
-                    "strategy": alert.strategy.dict() if alert.strategy else None,
+                    "strategy": model_to_dict(alert.strategy) if alert.strategy else None,
                     "telegram": dispatch_result["telegram"],
                     "desk_preview": dispatch_result["preview"],
+                    "signal_id": signal_id,
                 },
             )
 
@@ -211,10 +495,33 @@ class SignalScanner:
             return result
         except Exception as err:
             self._last_error = str(err)
-            return {
+            error_result = {
                 "asset": asset.upper(),
                 "error": str(err),
+                "signal_id": signal_id,
+                "error_type": err.__class__.__name__,
+                "error_stage": getattr(err, "signal_scanner_stage", "analysis"),
             }
+            if isinstance(err, ExecutionIntegrityError):
+                error_result["reason"] = str(err)
+            self._append_dispatch_log(
+                {
+                    "signal_id": signal_id,
+                    "timestamp": _utcnow_iso(),
+                    "asset": asset.upper(),
+                    "classification": "ERROR",
+                    "score": 0.0,
+                    "timeframe": None,
+                    "strategy": None,
+                    "mandate": {},
+                    "status": "failed",
+                    "scanner_result": error_result,
+                    "telegram": {},
+                    "desk": {},
+                    "error": str(err),
+                }
+            )
+            return error_result
 
     def run_cycle(self) -> Dict[str, Any]:
         cfg = self._cfg()
