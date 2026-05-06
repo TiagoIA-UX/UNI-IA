@@ -343,7 +343,13 @@ Endpoints em `ai-sentinel/api/main.py`:
 - `POST /api/signals/start`: inicia o scanner continuo.
 - `POST /api/signals/stop`: interrompe o scanner continuo.
 - `POST /api/signals/run-cycle`: executa uma rodada imediata de varredura.
-- `GET /api/telegram/status`: status do polling administrativo do Telegram.- `GET /api/bybit/signals`: rota interna do frontend institucional para coletar viés de mercado Bybit em tempo real.
+- `GET /api/telegram/status`: status do polling administrativo do Telegram.
+- `GET /api/bybit/signals`: rota interna do frontend institucional para coletar viés de mercado Bybit em tempo real.
+
+### Bybit live feed
+- Rota usa `BYBIT_SIGNAL_ASSETS` com símbolos Bybit válidos como `BTCUSDT`, `ETHUSDT`, `SOLUSDT`.
+- `BYBIT_SIGNAL_INTERVAL` controla o intervalo usado na consulta de candles.
+
 ## Auditoria operacional
 - Migration dedicada em `supabase/migrations/004_uni_ia_operational_audit.sql`.
 - Eventos persistidos: geracao de sinal, paper log, pendencia, execucao aprovada, execucao automatica e rejeicao.
