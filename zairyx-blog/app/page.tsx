@@ -66,6 +66,15 @@ export default async function Home({ searchParams }: HomeProps) {
         </div>
       </section>
 
+      <section className={styles.realtimeSection}>
+        <div className={styles.realtimeCard}>
+          <h3 className={styles.realtimeTitle}>Bybit real-time signal alignment</h3>
+          <p className={styles.realtimeBody}>
+            The platform calibrates structural alerts against live Bybit market flow and applies a neurobehavioral discipline layer before execution.
+          </p>
+        </div>
+      </section>
+
       <section className={styles.twoColSection}>
         <div className={styles.twoColCard}>
           <h3 className={styles.twoColTitle}>Operational governance flow</h3>

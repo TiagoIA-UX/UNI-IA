@@ -111,7 +111,8 @@
 }
 
 .gateSection,
-.windowSection {
+.windowSection,
+.liveFeedSection {
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 1.25rem;
   padding: 1.2rem;
@@ -122,6 +123,58 @@
   display: grid;
   gap: 0.35rem;
   margin-bottom: 1rem;
+}
+
+.liveFeedContainer {
+  display: grid;
+  gap: 1rem;
+}
+
+.liveFeedMeta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+.liveFeedWrapper {
+  overflow-x: auto;
+  border-radius: 1rem;
+  padding: 0.25rem;
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.liveFeedTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.liveFeedTable th,
+.liveFeedTable td {
+  padding: 0.85rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  color: #e2e8f0;
+  font-size: 0.95rem;
+}
+
+.liveFeedTable th {
+  position: sticky;
+  top: 0;
+  background: rgba(2, 6, 23, 0.92);
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.8rem;
+}
+
+.errorMessage {
+  margin: 0.85rem 0 0;
+  color: #fecdd3;
+  font-size: 0.95rem;
 }
 
 .sectionTitle {

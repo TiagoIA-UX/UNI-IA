@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { isAllowedPlatformEmail } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import riskFilterAggregation from '@/lib/risk-filter-aggregation.json'
+import LiveSignalFeed from './live-signal-feed'
 import styles from './plataforma.module.css'
 
 type AggregateEntry = {
@@ -164,7 +165,7 @@ export default async function PlataformaPage() {
           <h1 className={styles.heroTitle}>Painel institucional de validacao do RiskFilter</h1>
           <p className={styles.heroDesc}>
             O painel consolida performance, comportamento estrutural e integridade tecnica a partir de um snapshot
-            imutavel (sem agregacao, derivacao ou placeholders no front).
+            imutavel e exibe bias em tempo real alinhado a fluxo Bybit (sem agregacao, derivacao ou placeholders no front).
           </p>
           <div className={styles.heroStats}>
             <div className={styles.statCard}>
@@ -201,6 +202,10 @@ export default async function PlataformaPage() {
             <p className={styles.kpiNote}>Valor direto do snapshot (render apenas).</p>
           </div>
         ))}
+      </section>
+
+      <section className={styles.liveFeedSection}>
+        <LiveSignalFeed />
       </section>
 
       <section className={styles.gateSection}>
