@@ -246,22 +246,21 @@ export const riskCopy: Record<Locale, {
   en: {
     title: 'Risk Disclosure',
     body: 'This platform does not provide investment advice and does not guarantee profit. All market operations involve risk of partial or total capital loss.',
-    freeDelay: '⚠️ Free signals are delayed by 15 minutes. Premium is a paid service with real-time delivery.',
-    jurisdiction: 'This service operates under Brazilian law (LGPD, CVM regulations). Jurisdiction: São Paulo, Brazil.',
+    freeDelay: '⚠️ This platform is in development. No real signals, orders or subscriptions are active at this stage.',
+    jurisdiction: 'This platform is currently in development and not yet operational. When launched, it will be governed by Brazilian law. Jurisdiction: São Paulo, Brazil.',
   },
   es: {
     title: 'Divulgación de Riesgo',
     body: 'Esta plataforma no ofrece asesoría de inversión ni garantiza beneficio. Toda operación implica riesgo de pérdida parcial o total del capital.',
     freeDelay: '⚠️ Las señales gratuitas tienen 15 minutos de retraso. Premium es un servicio de pago con entrega en tiempo real.',
-    jurisdiction: 'Este servicio opera bajo la legislación brasileña (LGPD, regulaciones CVM). Jurisdicción: São Paulo, Brasil.',
+    jurisdiction: 'Esta plataforma está en desarrollo y aún no está operativa. Cuando entre en operación, se regirá por la legislación brasileña. Jurisdicción: São Paulo, Brasil.',
   },
   pt: {
     title: 'Aviso de Risco',
     body: 'Esta plataforma não presta recomendação de investimento e não garante lucro. Toda operação de mercado envolve risco de perda parcial ou total do capital investido.',
-    freeDelay: '⚠️ Os sinais do plano gratuito possuem atraso de 15 minutos. O plano Premium é pago e entrega em tempo real.',
+    freeDelay: '⚠️ Plataforma em desenvolvimento. Nenhum sinal real, ordem ou assinatura está ativa nesta fase.',
     // LGPD Art. 41 — DPO / foro de eleição obrigatório para atividade comercial
-    jurisdiction: 'Serviço operado sob legislação brasileira (LGPD, regulamentações CVM). Foro de eleição: Comarca de São Paulo/SP.',
-  },
+    jurisdiction: 'Plataforma em fase de desenvolvimento — não operacional. Foro de eleição: Comarca de São Paulo/SP, quando em operação.'  },
   ar: {
     title: 'إفصاح المخاطر',
     body: 'هذه المنصة لا تقدم نصيحة استثمار ولا تضمن الربح. كل عملية في السوق تنطوي على مخاطر خسارة جزئية أو كاملة لرأس المال.',

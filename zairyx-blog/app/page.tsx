@@ -170,7 +170,7 @@ export default async function Home({ searchParams }: HomeProps) {
         Referência comportamental: transparência radical aumenta confiança
         (Ariely, 2008 — "Predictably Irrational")
       */}
-      <section className={styles.riskSection}>
+      <section id="risco" className={styles.riskSection}>
         <h3 className={styles.riskTitle}>{risk.title}</h3>
         <p className={styles.riskBody}>{risk.body}</p>
         <p className={styles.riskFreeDelay}>{risk.freeDelay}</p>
