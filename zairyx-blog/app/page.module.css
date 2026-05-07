@@ -47,7 +47,7 @@
 }
 
 .heroStatement {
-  margin: 0 0 1.3rem 0;
+  margin: 0 0 0.8rem 0;
   color: #f8fafc;
   font-size: 1rem;
   font-weight: 800;
@@ -55,8 +55,25 @@
   text-transform: uppercase;
 }
 
+/*
+  NEUROCOMPORTAMENTAL — âncora numérica:
+  Faixa compacta, monoespaçada, entre statement e authority panel.
+  Comunicação direta, sistema analítico — aumenta credibilidade antes do CTA.
+*/
+.anchorStrip {
+  margin: 0 0 1.2rem 0;
+  padding: 0.55rem 1rem;
+  background: rgba(34, 211, 238, 0.08);
+  border-left: 3px solid #22d3ee;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: #67e8f9;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .authorityPanel {
-  margin: 0 0 1.8rem 0;
+  margin: 0 0 1.4rem 0;
   padding: 1rem 1.1rem;
   border-radius: 1rem;
   border: 1px solid rgba(148, 163, 184, 0.22);
@@ -94,10 +111,55 @@
   margin-right: 0.55rem;
 }
 
+/*
+  NEUROCOMPORTAMENTAL — prova social:
+  Painel de validação social com ícone de check — reduz incerteza pré-compra.
+  Ref: Cialdini (2001), princípio da prova social.
+*/
+.socialProofPanel {
+  margin: 0 0 1.4rem 0;
+  padding: 0.9rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  background: rgba(8, 47, 73, 0.3);
+}
+
+.socialProofLabel {
+  margin: 0 0 0.6rem 0;
+  color: #a5f3fc;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.socialProofList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+}
+
+.socialProofItem {
+  color: #e2e8f0;
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.socialProofItem::before {
+  content: '✓';
+  color: #34d399;
+  margin-right: 0.6rem;
+  font-weight: 900;
+}
+
 .heroCtas {
   display: flex;
   gap: 0.8rem;
   flex-wrap: wrap;
+  margin-bottom: 1.2rem;
 }
 
 .ctaPrimary {
@@ -119,6 +181,24 @@
   font-weight: 700;
   text-decoration: none;
   border: 1px solid #475569;
+}
+
+/*
+  JURÍDICO — P0 CRÍTICO:
+  Badge legal visível no hero. Fonte pequena mas legível (não escondida).
+  CDC Art. 6º, III — informação clara e ostensiva é obrigação do fornecedor.
+  CVM IN 621/20 — proibição de omitir limitações do serviço.
+*/
+.legalBadge {
+  margin-top: 0.6rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: rgba(69, 10, 10, 0.25);
+  color: #fca5a5;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  font-weight: 500;
 }
 
 .heroImageContainer {
@@ -252,6 +332,13 @@
 }
 
 /* ===== RISK SECTION ===== */
+/*
+  NEUROCOMPORTAMENTAL — redesign da seção de risco:
+  Mantida em vermelho (sinalização de alerta), mas agora inclui jurisdição
+  para aumentar credibilidade institucional. Transparência radical gera
+  confiança, não apenas medo.
+  Ref: Ariely (2008) — "Predictably Irrational"
+*/
 .riskSection {
   padding: 1rem 1.2rem;
   border: 1px solid rgba(248, 113, 113, 0.45);
@@ -273,9 +360,18 @@
 }
 
 .riskFreeDelay {
-  margin: 0;
+  margin: 0 0 0.4rem 0;
   color: #fbcfe8;
   line-height: 1.6;
   font-size: 0.95rem;
   font-weight: 700;
+}
+
+/* NOVO — jurisdição e compliance */
+.riskJurisdiction {
+  margin: 0;
+  color: #fca5a5;
+  line-height: 1.55;
+  font-size: 0.82rem;
+  opacity: 0.8;
 }
