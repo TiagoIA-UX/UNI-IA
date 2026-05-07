@@ -2,22 +2,19 @@
 
 > **Inteligência Operacional com Governança em Nível PhD, Estratégia em MBA e Auditoria em DBA**
 
-UNI IA é o laboratorio de inteligência artificial financeira que automatiza análise de mercados com **rigor institucional**, **controle de risco obsessivo** e **transparência completa**.
+UNI IA é o laboratório de inteligência artificial financeira que automatiza análise de mercados com **rigor institucional**, **controle de risco obsessivo** e **transparência completa**.
 
 - 🧠 **Motor de Decisão Cognitivo** (PhD-grade): 8+ agentes especializados que votam e chegam a consenso
 - 📊 **Governança Corporativa** (MBA-grade): Fluxo de aprovação, auditoria contínua, ciclos de risco
 - 🔐 **Auditoria de Dados** (DBA-grade): Rastreabilidade 100% de cada decisão, cada transação, cada erro
-- 📈 **Escalabilidade Lucrativa**: Financiado pelo produto principal (Cardapio-Digital), reinvestimento estratégico em P&D
-
-**Produto que paga a conta**: `Cardapio-Digital`  
-**Laboratório que acelera vantagem tecnológica**: `UNI IA`
+- 📈 **Escalabilidade Sustentável**: P&D financiado por operação consistente e disciplinada
 
 ### Princípio Fundador
 - ✅ **Caixa primeiro** (operação lucrativa é obrigação)
 - ✅ **Pesquisa aplicada depois** (P&D com ROI definido)
 - ✅ **Risco sempre controlado** (nunca supera 1-3% por posição)
 
-**UNI IA - Crescimento com Governança, não com Improviso**
+**UNI IA — Crescimento com Governança, não com Improviso**
 
 ---
 
@@ -49,7 +46,7 @@ npm run dev
 # 5. Abra http://localhost:3000 no navegador ✅
 ```
 
-**Novo em programação?** Veja o [Guia Completo de Instalação](./INSTALLATION.md) - escrito para iniciantes.
+**Novo em programação?** Veja o [Guia Completo de Instalação](./INSTALLATION.md) — escrito para iniciantes.
 
 ---
 
@@ -74,8 +71,6 @@ git checkout v1.0.0
 - **Major** (vX.0.0): Mudança de arquitetura, gates de governança revistos
 
 Veja todas as [releases aqui](https://github.com/TiagoIA-UX/UNI-IA/releases).
-
----
 
 ---
 
@@ -110,7 +105,7 @@ ENTRADA (Mercado Real)
 │  SentimentAgent→ Emoção de mercado          │
 │  TrendsAgent   → Anomalias de volume        │
 │  Fundamentalist→ Fundamentos firmes         │
-│  ARGUS         → Monitoramento de posição  │
+│  ARGUS         → Monitoramento de posição   │
 └─────────────────────────────────────────────┘
     ↓ (Ponderação com pesos variáveis)
 ┌─────────────────────────────────────────────┐
@@ -137,10 +132,10 @@ SAÍDA (Operação Aprovada ou Rejeitada)
 
 ## 📊 Governança em Camadas (MBA Strategic Framework)
 
-### Capital Allocation (Gestão de Risco - MBA)
+### Capital Allocation (Gestão de Risco)
 ```
-Portfolio Total: R$ 100.000
-├─ Max por posição: R$ 1.000-3.000 (1-3%)
+Portfolio Total: configurável no .env.local
+├─ Max por posição: 1-3% do capital
 ├─ Max por dia: Drawdown 5% antes de kill-switch
 ├─ Max por semana: 10% drawdown antes de revisão estratégica
 └─ Rebalanceio: Semanal com aprovação manual
@@ -194,6 +189,24 @@ ORDER BY created_at DESC;
 
 ---
 
+## ⚠️ Fallback de LLM — Alerta via Telegram
+
+O sistema não possui fallback operacional para outros provedores de LLM. Quando o Groq retornar erro (429, 5xx ou timeout), o comportamento esperado é:
+
+1. **Interrupção do ciclo** — nenhum sinal é gerado com payload inválido (Mandato Zero Bug)
+2. **Alerta imediato via Telegram** — o bot envia mensagem ao canal administrativo informando o tipo de falha, o ativo afetado e o timestamp
+3. **Retomada manual** — o operador reinicia o scanner via `/cycle` após verificar o status do provedor
+
+Configure no `.env.local`:
+```dotenv
+LLM_FAILURE_ALERT_ENABLED=true
+TELEGRAM_ADMIN_CHAT_IDS=seu_chat_id_aqui
+```
+
+Isso garante que falhas de infraestrutura nunca passem silenciosamente — sem custo adicional de API.
+
+---
+
 ## 📖 Documentação Completa
 
 | Recurso | Público-alvo | Leia quando |
@@ -208,26 +221,26 @@ ORDER BY created_at DESC;
 
 ## 🎓 Roadmap: Evolução Estratégica
 
-### Fase 1 - Fundação (Agora ✅)
+### Fase 1 — Fundação (Agora ✅)
 - ✅ Robusto de dados, risco e auditoria
 - ✅ 8+ agentes especializados votando
 - ✅ Modo paper + approval + live
 - ✅ Rastreabilidade completa
 - **Objetivo**: Permanecer (não virar mais uma startup falida)
 
-### Fase 2 - Eficiência (Q3 2026)
+### Fase 2 — Eficiência (Q3 2026)
 - 📅 Reduzir latência de análise (atual: ~5s → target: <1s)
 - 📅 Aumentar cobertura de ativos (3x+ pares)
 - 📅 Fine-tuning de pesos dos agentes com feedback real
 - **Objetivo**: Lucro por transação mais previsível
 
-### Fase 3 - Escala (Q4 2026+)
+### Fase 3 — Escala (Q4 2026+)
 - 📅 Múltiplas estratégias (swing, scalping, mean reversion)
 - 📅 Multi-timeframe (1h, 4h, daily)
 - 📅 Liquidez automática com proteção de drawdown
 - **Objetivo**: AUM crescente com controle de risco
 
-### Fase 4 - Monetização Adjacente (2027)
+### Fase 4 — Monetização Adjacente (2027)
 - 📅 API pública de sinais (B2B)
 - 📅 Dashboard de analytics (SaaS)
 - 📅 Consultoria de operação para fundos
@@ -271,77 +284,79 @@ Referencia: #123 (número da issue)
 
 ---
 
-1. O Cardapio-Digital gera caixa.
-2. Uma parcela fixa do lucro liquido mensal e reservada para P&D.
+## Modelo de financiamento de P&D
+
+1. A operação principal gera caixa.
+2. Uma parcela fixa do lucro líquido mensal é reservada para P&D.
 3. Essa reserva financia apenas entregas da UNI IA com KPI claro.
-4. Cada ciclo fecha com auditoria de resultado (tecnico + financeiro).
+4. Cada ciclo fecha com auditoria de resultado (técnico + financeiro).
 
-Politica sugerida de alocacao (ajustavel):
-- 70% do lucro liquido: operacao, aquisicao e resiliencia do Cardapio;
-- 20% do lucro liquido: investimento incremental na UNI IA;
-- 10% do lucro liquido: reserva estrategica de seguranca.
+Política sugerida de alocação (ajustável):
+- 70% do lucro líquido: operação, aquisição e resiliência da base de negócios;
+- 20% do lucro líquido: investimento incremental na UNI IA;
+- 10% do lucro líquido: reserva estratégica de segurança.
 
-Gates obrigatorios para liberar investimento no ciclo seguinte:
-- disponibilidade operacional estavel;
+Gates obrigatórios para liberar investimento no ciclo seguinte:
+- disponibilidade operacional estável;
 - custos sob controle;
 - backlog priorizado por impacto;
-- entrega mensuravel no ciclo anterior.
+- entrega mensurável no ciclo anterior.
 
 ## Mapa de maturidade
 
-Fase 1 - Fundacao (atual):
-- robustez de dados, risco, auditoria e execucao controlada.
+Fase 1 — Fundação (atual):
+- robustez de dados, risco, auditoria e execução controlada.
 
-Fase 2 - Eficiencia:
-- reduzir custo por analise e aumentar confiabilidade do pipeline.
+Fase 2 — Eficiência:
+- reduzir custo por análise e aumentar confiabilidade do pipeline.
 
-Fase 3 - Escala:
-- ampliar cobertura de ativos e automacoes com controles mais fortes.
+Fase 3 — Escala:
+- ampliar cobertura de ativos e automações com controles mais fortes.
 
-Fase 4 - Monetizacao adjacente:
-- empacotar capacidades maduras como novos produtos/servicos.
+Fase 4 — Monetização adjacente:
+- empacotar capacidades maduras como novos produtos/serviços.
 
-## Principios operacionais
-- Dados reais obrigatorios.
-- Sem placeholder e sem fallback operacional em execucao.
-- Gate por camadas: dados, estrategia, risco, integracao e auditoria.
-- Modo `paper` por padrao e liberacao gradual para `live`.
-- Toda evolucao de feature deve ter impacto de negocio definido antes da implementacao.
+## Princípios operacionais
+- Dados reais obrigatórios.
+- Sem placeholder e sem fallback operacional em execução.
+- Gate por camadas: dados, estratégia, risco, integração e auditoria.
+- Modo `paper` por padrão e liberação gradual para `live`.
+- Toda evolução de feature deve ter impacto de negócio definido antes da implementação.
 
 ## Mandato Zero Bug
-- Zero comportamento silencioso: falha de LLM, auditoria ou notificacao obrigatoria deve interromper o fluxo operacional.
-- Zero fallback operacional: score, classificacao e direcao so existem com payload valido e verificavel.
-- Zero placeholder em producao: o pipeline usa dados reais de mercado, noticias e volume; resposta sintetica de erro nao pode virar sinal.
-- Zero execucao sem validacao: contexto, score, classificacao, governanca, auditoria e aprovacao manual precisam estar consistentes antes de qualquer ordem real.
-- Zero ambiguidade de estado: `paper`, `approval` e `live` possuem gates explicitos de prontidao e bloqueio.
+- Zero comportamento silencioso: falha de LLM, auditoria ou notificação obrigatória deve interromper o fluxo operacional e disparar alerta Telegram.
+- Zero fallback operacional: score, classificação e direção só existem com payload válido e verificável.
+- Zero placeholder em produção: o pipeline usa dados reais de mercado, notícias e volume; resposta sintética de erro não pode virar sinal.
+- Zero execução sem validação: contexto, score, classificação, governança, auditoria e aprovação manual precisam estar consistentes antes de qualquer ordem real.
+- Zero ambiguidade de estado: `paper`, `approval` e `live` possuem gates explícitos de prontidão e bloqueio.
 
-## Arquitetura de decisao em camadas
+## Arquitetura de decisão em camadas
 - MacroAgent: regime risk-on, risk-off ou neutro do ambiente amplo.
-- ATLAS: estrutura tecnica, volatilidade, volume, momentum e niveis.
-- ORION: narrativa e contexto de noticias com sintese cognitiva.
+- ATLAS: estrutura técnica, volatilidade, volume, momentum e níveis.
+- ORION: narrativa e contexto de notícias com síntese cognitiva.
 - NewsAgent: leitura objetiva das manchetes recentes e impacto direto.
 - SentimentAgent: tom emocional das manchetes, medo, euforia ou incerteza.
-- TrendsAgent: anomalia de volume e tracao de atencao do mercado.
-- FundamentalistAgent: protecao de capital via fundamentos quando aplicavel.
-- AEGIS: fusao ponderada das especialidades em score, classificacao e direcao.
-- SENTINEL: gate de risco e governanca antes de dispatch ou execucao.
-- ARGUS: monitoramento de posicao, reversao e outcome real.
+- TrendsAgent: anomalia de volume e tração de atenção do mercado.
+- FundamentalistAgent: proteção de capital via fundamentos quando aplicável.
+- AEGIS: fusão ponderada das especialidades em score, classificação e direção.
+- SENTINEL: gate de risco e governança antes de dispatch ou execução.
+- ARGUS: monitoramento de posição, reversão e outcome real.
 
-## Modulos principais
-- `ai-sentinel/`: backend FastAPI de orquestracao, Telegram e mesa privada.
-- `zairyx-blog/`: frontend comercial e paginas institucionais da plataforma.
-- `app.js`, `data.js`, `ai.js`: cockpit analitico com gate de execucao.
+## Módulos principais
+- `ai-sentinel/`: backend FastAPI de orquestração, Telegram e mesa privada.
+- `zairyx-blog/`: frontend comercial e páginas institucionais da plataforma.
+- `app.js`, `data.js`, `ai.js`: cockpit analítico com gate de execução.
 
 ## Mesa privada (backend)
 Endpoints em `ai-sentinel/api/main.py`:
 - `POST /api/analyze/{asset}`: analisa e passa pelo gate da mesa.
-- `GET /api/desk/status`: status de modo, copy trade e pendencias.
-- `GET /api/desk/pending`: fila de aprovacao manual.
+- `GET /api/desk/status`: status de modo e pendências.
+- `GET /api/desk/pending`: fila de aprovação manual.
 - `POST /api/desk/approve/{request_id}`: aprova e executa em live.
 - `POST /api/desk/reject/{request_id}`: rejeita request pendente.
-- `GET /api/signals/status`: status do scanner continuo de sinais.
-- `POST /api/signals/start`: inicia o scanner continuo.
-- `POST /api/signals/stop`: interrompe o scanner continuo.
+- `GET /api/signals/status`: status do scanner contínuo de sinais.
+- `POST /api/signals/start`: inicia o scanner contínuo.
+- `POST /api/signals/stop`: interrompe o scanner contínuo.
 - `POST /api/signals/run-cycle`: executa uma rodada imediata de varredura.
 - `GET /api/telegram/status`: status do polling administrativo do Telegram.
 - `GET /api/bybit/signals`: rota interna do frontend institucional para coletar viés de mercado Bybit em tempo real.
@@ -352,18 +367,19 @@ Endpoints em `ai-sentinel/api/main.py`:
 
 ## Auditoria operacional
 - Migration dedicada em `supabase/migrations/004_uni_ia_operational_audit.sql`.
-- Eventos persistidos: geracao de sinal, paper log, pendencia, execucao aprovada, execucao automatica e rejeicao.
-- Persistencia feita pelo backend Python via REST Admin do Supabase usando `SUPABASE_SERVICE_ROLE_KEY`.
+- Eventos persistidos: geração de sinal, paper log, pendência, execução aprovada, execução automática e rejeição.
+- Persistência feita pelo backend Python via REST Admin do Supabase usando `SUPABASE_SERVICE_ROLE_KEY`.
 
-## Variaveis obrigatorias (execucao real)
+## Variáveis obrigatórias (execução real)
 No `.env.local`:
 - `TELEGRAM_BOT_TOKEN` ou `TELEGRAM_FREE_BOT_TOKEN` e `TELEGRAM_PREMIUM_BOT_TOKEN`
 - `TELEGRAM_FREE_CHANNEL`
 - `TELEGRAM_PREMIUM_CHANNEL`
 - `TELEGRAM_CONTROL_ENABLED=true` para ativar comandos administrativos por polling
-- `TELEGRAM_ADMIN_CHAT_IDS=123456789`
-- `TELEGRAM_ADMIN_USER_IDS=123456789`
-- `SIGNAL_SCANNER_ENABLED=true` para varredura automatica
+- `TELEGRAM_ADMIN_CHAT_IDS=seu_chat_id`
+- `TELEGRAM_ADMIN_USER_IDS=seu_user_id`
+- `LLM_FAILURE_ALERT_ENABLED=true` para alertas de falha do provedor LLM
+- `SIGNAL_SCANNER_ENABLED=true` para varredura automática
 - `SIGNAL_SCAN_ASSETS=BTCUSDT,ETHUSDT,SOLUSDT`
 - `SIGNAL_SCAN_INTERVAL_SECONDS=60`
 - `SIGNAL_SCAN_STAGGER_SECONDS=2`
@@ -374,26 +390,25 @@ No `.env.local`:
 - `BROKER_API_BASE_URL`
 - `BROKER_API_KEY`
 - `BROKER_API_SECRET` (Bybit)
-- `BROKER_ACCOUNT_ID` (apenas para adapter HTTP generico, nao para Bybit)
-- `COPY_TRADE_ENABLED=true` (somente apos homologacao)
+- `BROKER_ACCOUNT_ID` (apenas para adapter HTTP genérico, não para Bybit)
 - `DESK_MODE=live`
 - `DESK_REQUIRE_MANUAL_APPROVAL=true`
 
-## Fluxo recomendado de entrada em producao
-1. Homologar em `paper` com dados reais e logs auditaveis.
-2. Ativar `live` com aprovacao manual e whitelist de ativos.
-3. Validar latencia, rejeicoes e reconciliacao por 24h.
+## Fluxo recomendado de entrada em produção
+1. Homologar em `paper` com dados reais e logs auditáveis.
+2. Ativar `live` com aprovação manual e whitelist de ativos.
+3. Validar latência, rejeições e reconciliação por 24h.
 4. Escalar gradualmente risco e universo de ativos.
 
 ## Tese institucional
 
-- Estrategia sem governanca e aposta.
-- Mercado nao elimina o iniciante. Elimina o indisciplinado.
-- Diversificacao sem controle de risco nao e protecao.
-- A prioridade do sistema e permanencia, nao euforia operacional.
-- P&D sem caixa e hobby; P&D com governanca vira ativo.
+- Estratégia sem governança é aposta.
+- Mercado não elimina o iniciante. Elimina o indisciplinado.
+- Diversificação sem controle de risco não é proteção.
+- A prioridade do sistema é permanência, não euforia operacional.
+- P&D sem caixa é hobby; P&D com governança vira ativo.
 
-## Execucao local
+## Execução local
 ### Backend (ai-sentinel)
 ```bash
 cd ai-sentinel
@@ -401,12 +416,12 @@ pip install -r requirements.txt
 python run_local_api.py
 ```
 
-Observacao:
-- O launcher `run_local_api.py` usa `h11` e desabilita WebSocket para evitar dependencias quebradas do ambiente local do Windows.
-- Em `live`, a mesa continua exigindo aprovacao manual quando `DESK_REQUIRE_MANUAL_APPROVAL=true`.
-- Para automacao continua, habilite `SIGNAL_SCANNER_ENABLED=true` e defina a lista de ativos em `SIGNAL_SCAN_ASSETS`.
+Observação:
+- O launcher `run_local_api.py` usa `h11` e desabilita WebSocket para evitar dependências quebradas do ambiente local do Windows.
+- Em `live`, a mesa continua exigindo aprovação manual quando `DESK_REQUIRE_MANUAL_APPROVAL=true`.
+- Para automação contínua, habilite `SIGNAL_SCANNER_ENABLED=true` e defina a lista de ativos em `SIGNAL_SCAN_ASSETS`.
 - Comandos suportados no Telegram administrativo: `/status`, `/pending`, `/approve <request_id>`, `/reject <request_id> [motivo]`, `/cycle`.
-- Para descobrir `TELEGRAM_ADMIN_CHAT_IDS` ou `TELEGRAM_ADMIN_USER_IDS`, envie uma mensagem para o bot `@uni_ia_bot` e depois consulte `/api/telegram/status` para ler `last_seen_chat_id` e `last_seen_user_id`.
+- Para descobrir `TELEGRAM_ADMIN_CHAT_IDS` ou `TELEGRAM_ADMIN_USER_IDS`, envie uma mensagem para o seu bot e depois consulte `/api/telegram/status` para ler `last_seen_chat_id` e `last_seen_user_id`.
 
 ### Frontend (zairyx-blog)
 ```bash
@@ -419,17 +434,17 @@ npm run dev
 
 ### Root Directory correto
 - Projeto no Vercel deve apontar para `zairyx-blog`.
-- Se ficar em `./`, o build nao encontra o app Next.js.
+- Se ficar em `./`, o build não encontra o app Next.js.
 
 ### Causa do erro mais comum
 - Erro: `Build Canceled` com mensagem `created with an unverified commit`.
-- Isso ocorre quando `Require Verified Commits` esta ativo no Vercel e o commit no `main` nao esta verificado.
+- Isso ocorre quando `Require Verified Commits` está ativo no Vercel e o commit no `main` não está verificado.
 
-### Prevencao
+### Prevenção
 1. Manter `Require Verified Commits` desativado, ou
 2. Garantir que os commits no `main` sejam `Verified`.
 
-### Recuperacao rapida (quando bloquear)
+### Recuperação rápida (quando bloquear)
 1. Criar branch de trigger e push:
 ```bash
 git checkout -b deploy/verified-trigger
@@ -440,6 +455,27 @@ git push -u origin deploy/verified-trigger
 3. O commit gerado pelo GitHub tende a sair como `Verified`.
 4. O Vercel volta a aceitar o deploy automaticamente.
 
-### Validacao
+### Validação
 - Commit: verificar no GitHub se aparece `Verified`.
 - Vercel: status do contexto `Vercel` deve sair de `pending` para `success`.
+
+---
+
+## 📄 Licença
+
+Este projeto é licenciado sob a **Business Source License 1.1 (BUSL-1.1)**.
+
+- ✅ Uso pessoal, estudo e avaliação: **permitidos**
+- ✅ Contribuições abertas via PR: **bem-vindas**
+- ❌ Uso comercial sem autorização escrita do titular: **proibido**
+- 📅 Conversão para licença aberta: **01 de Janeiro de 2028**
+
+> Para licenciamento comercial, parcerias ou uso institucional, entre em contato via Issues no repositório.
+
+Veja o arquivo [LICENSE](./LICENSE) para o texto completo.
+
+---
+
+> **Última atualização**: 07 de Maio de 2026
+> **Versão**: 1.2
+> **Compatibilidade**: Windows, Mac, Linux

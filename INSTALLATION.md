@@ -143,6 +143,8 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...             ← campo "service_role" (⚠�
 GROQ_API_KEY=gsk_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
+> ⚠️ **Se o Groq estiver fora do ar**: O sistema interrompe o ciclo automaticamente (sem gerar sinais inválidos) e envia um alerta via Telegram para o canal administrativo. Configure `LLM_FAILURE_ALERT_ENABLED=true` e `TELEGRAM_ADMIN_CHAT_IDS` no `.env.local`.
+
 #### 🔐 CRON_SECRET (segurança do agendador)
 Gere uma senha aleatória segura diretamente no terminal:
 
@@ -150,13 +152,13 @@ Gere uma senha aleatória segura diretamente no terminal:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Copie o resultado (ex: `a3f9b2c1d4e5f6...`) e cole:
+Copie o resultado e cole:
 
 ```dotenv
-CRON_SECRET=a3f9b2c1d4e5f6...
+CRON_SECRET=resultado_aqui
 ```
 
-#### 📱 Telegram (notificações — opcional)
+#### 📱 Telegram (notificações — essencial para alertas operacionais)
 1. No Telegram, busque por **@BotFather**
 2. Envie `/newbot` e siga as instruções
 3. Copie o token fornecido
@@ -164,7 +166,11 @@ CRON_SECRET=a3f9b2c1d4e5f6...
 ```dotenv
 TELEGRAM_BOT_TOKEN=1234567890:AAxxxxxxxxxxxxxx
 TELEGRAM_FREE_CHANNEL=@nome_do_seu_canal
+LLM_FAILURE_ALERT_ENABLED=true
+TELEGRAM_ADMIN_CHAT_IDS=seu_chat_id_aqui
 ```
+
+> 💡 Para descobrir seu `TELEGRAM_ADMIN_CHAT_IDS`, envie uma mensagem para o seu bot e acesse `/api/telegram/status` — o campo `last_seen_chat_id` mostrará o valor correto.
 
 ---
 
@@ -342,6 +348,9 @@ Adicione ao `.env.local`: `CRON_SECRET=seu_valor_aqui`
 1. Verifique se o bot foi adicionado como **admin** no canal
 2. Teste: `curl http://localhost:8000/api/telegram/status`
 
+### ❌ Groq retorna erro 429 ou 5xx
+O sistema interrompe o ciclo e dispara alerta Telegram automaticamente (quando `LLM_FAILURE_ALERT_ENABLED=true`). Verifique o status em [console.groq.com](https://console.groq.com) e retome via comando `/cycle` no canal administrativo.
+
 ### ❌ Porta 3000 já em uso
 ```bash
 # Mac/Linux:
@@ -440,6 +449,7 @@ Nenhuma decisão passa sem consenso. Cada voto é registrado e auditável.
 - [ ] Supabase: URL e chaves preenchidas corretamente
 - [ ] Groq: API Key preenchida
 - [ ] CRON_SECRET gerado e preenchido
+- [ ] Telegram: bot criado e `LLM_FAILURE_ALERT_ENABLED=true` configurado
 - [ ] Schema SQL executado no Supabase (5 tabelas criadas)
 - [ ] Backend rodando (`python run_local_api.py` → porta 8000)
 - [ ] Frontend rodando (`npm run dev` → porta 3000)
@@ -463,12 +473,8 @@ Se algo não funcionar após seguir este guia:
    [github.com/TiagoIA-UX/UNI-IA/issues](https://github.com/TiagoIA-UX/UNI-IA/issues)
    Inclua: sistema operacional, versões instaladas e o erro completo.
 
-3. **Contato direto**:
-   - 📧 Email: [oficialuni.iabrasil@gmail.com](mailto:oficialuni.iabrasil@gmail.com)
-   - 💬 WhatsApp: [+55 (19) 99688-7993](https://wa.me/5519996887993)
-
 ---
 
-> **Última atualização**: 05 de Maio de 2026
-> **Versão**: 1.1 (unificada)
+> **Última atualização**: 07 de Maio de 2026
+> **Versão**: 1.2 (revisada)
 > **Compatibilidade**: Windows, Mac, Linux
