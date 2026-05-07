@@ -461,21 +461,35 @@ git push -u origin deploy/verified-trigger
 
 ---
 
+
 ## 📄 Licença
 
-Este projeto é licenciado sob a **Business Source License 1.1 (BUSL-1.1)**.
+Este projeto é licenciado sob a **Business Source License 1.1 (BUSL-1.1)** — o mesmo modelo adotado por empresas como HashiCorp (Terraform), Sentry e MariaDB.
 
-- ✅ Uso pessoal, estudo e avaliação: **permitidos**
-- ✅ Contribuições abertas via PR: **bem-vindas**
-- ❌ Uso comercial sem autorização escrita do titular: **proibido**
-- 📅 Conversão para licença aberta: **01 de Janeiro de 2028**
+| Uso | Permitido? |
 
-> Para licenciamento comercial, parcerias ou uso institucional, entre em contato via Issues no repositório.
+|-----|------------|
+
+| Uso pessoal e estudo | ✅ Sim |
+
+| Contribuições via PR | ✅ Bem-vindas |
+
+| Uso comercial sem autorização | ❌ Proibido até 01/01/2028 |
+
+| Após 01/01/2028 | ✅ Converte para Apache 2.0 |
+
+Para licenciamento comercial, parcerias ou uso institucional, entre em contato:
+
+- 📧 oficialuni.iabrasil@gmail.com
+
+- 💬 WhatsApp: +55 (19) 99688-7993
 
 Veja o arquivo [LICENSE](./LICENSE) para o texto completo.
 
+
 ---
 
-> **Última atualização**: 07 de Maio de 2026
-> **Versão**: 1.2
+> **Ultima atualizacao**: 07 de Maio de 2026
+> **Versao**: 1.2
 > **Compatibilidade**: Windows, Mac, Linux
+
