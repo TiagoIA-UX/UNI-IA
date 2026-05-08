@@ -1,15 +1,19 @@
-export const ALLOWED_PLATFORM_EMAIL = (
-  process.env.ALLOWED_PLATFORM_EMAIL || 'globemarket7@gmail.com'
-).toLowerCase()
+export const ALLOWED_PLATFORM_EMAILS: string[] = (
+  process.env.ALLOWED_PLATFORM_EMAILS ||
+  'globemarket7@gmail.com,tiagorocha1777@gmail.com,zairyx.ai@gmail.com,oficialuni.iabrasil@gmail.com,ciadaautomacao@gmail.com'
+)
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean)
 
-export function isAllowedPlatformEmail(email?: string | null) {
-  return !!email && email.toLowerCase() === ALLOWED_PLATFORM_EMAIL
+// Mantém compatibilidade com código legado que usa isAllowedPlatformEmail
+export function isAllowedPlatformEmail(email?: string | null): boolean {
+  return !!email && ALLOWED_PLATFORM_EMAILS.includes(email.toLowerCase())
 }
 
-export function normalizeNextPath(next?: string | null) {
+export function normalizeNextPath(next?: string | null): string {
   if (!next || !next.startsWith('/')) {
     return '/plataforma'
   }
-
   return next
 }
