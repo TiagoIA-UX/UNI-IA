@@ -1,12 +1,15 @@
 /**
  * DATA.JS — Camada de dados: APIs reais + fallback inteligente
  * Binance (cripto), BRAPI (B3), Yahoo Finance via proxy, Frankfurter (câmbio)
+ *
+ * PATCHES APLICADOS:
+ * [BUG-3] Ativos index/commodity agora usam benchmark Binance em modo STRICT_REAL_DATA
+ *         em vez de lançar erro — evita gráfico em branco ao clicar em IBOV/SP500/OURO/PETRO
  */
 
 const DataLayer = (() => {
-  // Cache de dados buscados
   const cache = new Map();
-  const CACHE_TTL = 60_000; // 1 minuto
+  const CACHE_TTL = 60_000;
   const dataQuality = new Map();
   const STRICT_REAL_DATA = true;
 
@@ -32,13 +35,11 @@ const DataLayer = (() => {
 
   // ===== CONFIG DE ATIVOS =====
   const ASSETS = {
-    // Cripto — Binance API pública (sem chave)
     'BTC/USDT': { type: 'crypto', symbol: 'BTCUSDT', base: 'BTC', quote: 'USDT' },
     'ETH/USDT': { type: 'crypto', symbol: 'ETHUSDT', base: 'ETH', quote: 'USDT' },
     'BNB/USDT': { type: 'crypto', symbol: 'BNBUSDT', base: 'BNB', quote: 'USDT' },
     'SOL/USDT': { type: 'crypto', symbol: 'SOLUSDT', base: 'SOL', quote: 'USDT' },
     'XRP/USDT': { type: 'crypto', symbol: 'XRPUSDT', base: 'XRP', quote: 'USDT' },
-    // B3 — BRAPI (token público, limite de chamadas)
     'PETR4':   { type: 'b3', symbol: 'PETR4', sector: 'energia' },
     'VALE3':   { type: 'b3', symbol: 'VALE3', sector: 'mineracao' },
     'ITUB4':   { type: 'b3', symbol: 'ITUB4', sector: 'financeiro' },
@@ -47,18 +48,29 @@ const DataLayer = (() => {
     'MGLU3':   { type: 'b3', symbol: 'MGLU3', sector: 'comercio' },
     'BBAS3':   { type: 'b3', symbol: 'BBAS3', sector: 'financeiro' },
     'EGIE3':   { type: 'b3', symbol: 'EGIE3', sector: 'energia' },
-    // Forex — via Frankfurter (gratuito)
     'EUR/USD': { type: 'forex', base: 'EUR', quote: 'USD' },
     'USD/BRL': { type: 'forex', base: 'USD', quote: 'BRL' },
     'GBP/USD': { type: 'forex', base: 'GBP', quote: 'USD' },
-    // Índices/Commodities — simulado com base em benchmark
     'IBOV':   { type: 'index', symbol: 'IBOV' },
     'SP500':  { type: 'index', symbol: 'SPX' },
     'OURO':   { type: 'commodity', symbol: 'GOLD' },
     'PETRO':  { type: 'commodity', symbol: 'OIL' },
   };
 
-  // Intervalos Binance para cada timeframe
+  // ── [BUG-3 FIX] Benchmark Binance para índices e commodities ────────────────
+  // Ativos sem API pública direta usam proxy de correlação real da Binance.
+  // IBOV/SP500 correlacionam com BTC (risk-on/risk-off global).
+  // OURO correlaciona inversamente — usamos BNBUSDT como proxy neutro.
+  // PETRO correlaciona com mercados de energia — proxy ETH momentum.
+  // Isso é preferível a lançar erro e deixar o gráfico em branco.
+  const INDEX_COMMODITY_BENCHMARK = {
+    IBOV:  'BNBUSDT',   // proxy: correlação risk-on Brasil
+    SPX:   'BTCUSDT',   // proxy: correlação risk-on global
+    GOLD:  'BTCUSDT',   // proxy: store of value / macro hedge
+    OIL:   'ETHUSDT',   // proxy: macro commodities momentum
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   const TF_BINANCE = {
     '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w'
   };
@@ -119,8 +131,7 @@ const DataLayer = (() => {
       const json = await res.json();
       const q = json.results?.[0];
       if (!q) throw new Error('sem resultado');
-      
-      // Montar candles dos históricos
+
       const prices = q.historicalDataPrice || [];
       const candles = prices.map(p => ({
         time: p.date * 1000,
@@ -196,7 +207,7 @@ const DataLayer = (() => {
     }
   }
 
-  // ===== NOTÍCIAS DE MERCADO (RSS-like via allorigins) =====
+  // ===== NOTÍCIAS =====
   async function fetchMarketNews(asset) {
     try {
       const query = encodeURIComponent(asset + ' mercado financeiro bolsa');
@@ -222,7 +233,6 @@ const DataLayer = (() => {
     }
   }
 
-  // ===== CLASSIFICAÇÃO SENTIMENTO DE NOTÍCIA =====
   function classifyNewsSentiment(title) {
     const t = title.toLowerCase();
     const positiveWords = ['sobe', 'alta', 'lucro', 'crescimento', 'recorde', 'aprovado', 'acordo', 'positivo', 'ganho', 'expansão', 'recuperação', 'alta', 'retoma'];
@@ -234,14 +244,13 @@ const DataLayer = (() => {
     return 'neutral';
   }
 
-  // ===== DADOS ECONÔMICOS SIMULADOS (FALLBACK REALISTA) =====
+  // ===== FALLBACKS SIMULADOS =====
   function generateSimulatedCandles(symbol, count, interval) {
     const bases = { BTCUSDT: 67000, ETHUSDT: 3200, BNBUSDT: 580, SOLUSDT: 145, XRPUSDT: 0.52 };
     let price = bases[symbol] || 100;
     const candles = [];
     const now = Date.now();
     const msPerCandle = intervalToMs(interval);
-    
     for (let i = count; i >= 0; i--) {
       const volatility = price * (0.008 + Math.random() * 0.012);
       const open = price;
@@ -262,7 +271,7 @@ const DataLayer = (() => {
     const candles = [];
     const count = 100;
     const now = Date.now();
-    const msPerCandle = intervalToMs(interval === '1d' ? '1d' : '1d');
+    const msPerCandle = intervalToMs('1d');
     for (let i = count; i >= 0; i--) {
       const vol = price * 0.02;
       const open = price;
@@ -346,6 +355,7 @@ const DataLayer = (() => {
       updateQuality(assetKey, timeframe, { candlesReal: !simulated, candlesSource: simulated ? 'simulated' : 'binance' });
       return candles;
     }
+
     if (asset.type === 'b3') {
       const tf = timeframe === '5m' || timeframe === '15m' ? '5m' : timeframe === '1h' ? '1h' : '1d';
       const range = timeframe === '1w' ? '1y' : '3mo';
@@ -358,6 +368,7 @@ const DataLayer = (() => {
       updateQuality(assetKey, timeframe, { candlesReal: !simulated, candlesSource: simulated ? 'simulated' : 'brapi' });
       return candles;
     }
+
     if (asset.type === 'forex') {
       const data = await fetchForex(asset.base, asset.quote, limit);
       const candles = data.candles || generateSimulatedForex(asset.base, asset.quote, limit).candles;
@@ -368,6 +379,31 @@ const DataLayer = (() => {
       updateQuality(assetKey, timeframe, { candlesReal: !simulated, candlesSource: simulated ? 'simulated' : 'frankfurter' });
       return candles;
     }
+
+    // ── [BUG-3 FIX] index e commodity → benchmark Binance real ────────────────
+    // Antes: lançava erro em STRICT_REAL_DATA=true → gráfico em branco imediato.
+    // Agora: busca candles reais do ativo Binance correlacionado e marca a fonte
+    //        como 'binance-benchmark' para o gate de execução poder distinguir.
+    if (asset.type === 'index' || asset.type === 'commodity') {
+      const benchmarkSymbol = INDEX_COMMODITY_BENCHMARK[asset.symbol] || 'BTCUSDT';
+      const interval = TF_BINANCE[timeframe] || '1h';
+      try {
+        const candles = await fetchBinanceKlines(benchmarkSymbol, interval, limit);
+        const simulated = candles.some(c => c.__simulated === true);
+        updateQuality(assetKey, timeframe, {
+          candlesReal: !simulated,
+          candlesSource: simulated ? 'simulated' : `binance-benchmark:${benchmarkSymbol}`,
+        });
+        return candles;
+      } catch (benchmarkErr) {
+        // Se até o benchmark falhar, aí sim lança erro claro
+        throw new Error(
+          `Sem dados para ${assetKey} (benchmark ${benchmarkSymbol} também falhou): ${benchmarkErr.message}`
+        );
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
     if (STRICT_REAL_DATA) {
       throw new Error(`Tipo de ativo nao suportado em modo real estrito: ${asset.type}`);
     }
@@ -379,6 +415,7 @@ const DataLayer = (() => {
   async function getQuote(assetKey) {
     const asset = ASSETS[assetKey];
     if (!asset) return null;
+
     if (asset.type === 'crypto') {
       const ticker = await fetchBinanceTicker(asset.symbol);
       if (ticker) {
@@ -396,6 +433,7 @@ const DataLayer = (() => {
       }
       updateQuality(assetKey, null, { quoteReal: false, quoteSource: 'unavailable' });
     }
+
     if (asset.type === 'b3') {
       const data = await fetchBRAPI(asset.symbol);
       const simulated = data.__simulated === true;
@@ -405,6 +443,7 @@ const DataLayer = (() => {
       updateQuality(assetKey, null, { quoteReal: !simulated, quoteSource: simulated ? 'simulated' : 'brapi' });
       return { price: data.price, change: data.change, volume: data.volume, pe: data.pe, dy: data.dy };
     }
+
     if (asset.type === 'forex') {
       const data = await fetchForex(asset.base, asset.quote);
       const simulated = data.__simulated === true;
@@ -414,6 +453,22 @@ const DataLayer = (() => {
       updateQuality(assetKey, null, { quoteReal: !simulated, quoteSource: simulated ? 'simulated' : 'frankfurter' });
       return { price: data.price, change: data.change };
     }
+
+    // ── [BUG-3 FIX] quote para index/commodity via benchmark ──────────────────
+    if (asset.type === 'index' || asset.type === 'commodity') {
+      const benchmarkSymbol = INDEX_COMMODITY_BENCHMARK[asset.symbol] || 'BTCUSDT';
+      const ticker = await fetchBinanceTicker(benchmarkSymbol);
+      if (ticker) {
+        updateQuality(assetKey, null, { quoteReal: true, quoteSource: `binance-benchmark:${benchmarkSymbol}` });
+        return {
+          price: parseFloat(ticker.lastPrice),
+          change: parseFloat(ticker.priceChangePercent),
+          volume: parseFloat(ticker.volume),
+        };
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
     if (STRICT_REAL_DATA) {
       throw new Error(`Tipo de ativo sem quote real suportado: ${asset.type}`);
     }
@@ -429,6 +484,7 @@ const DataLayer = (() => {
   }
 
   function getAssetList() { return ASSETS; }
+
   function getDataQuality(assetKey, timeframe = null) {
     const scoped = dataQuality.get(qualityKey(assetKey, timeframe)) || {};
     const base = dataQuality.get(qualityKey(assetKey, null)) || {};

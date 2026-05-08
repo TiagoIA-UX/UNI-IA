@@ -1,6 +1,10 @@
 /**
  * APP.JS — Controller principal do Uni IA
  * Orquestra: DataLayer, TechnicalEngine, CandlePatterns, ExternalFactors, AIEngine
+ *
+ * PATCHES APLICADOS:
+ * [BUG-1] Auto-select BTC/USDT no DOMContentLoaded — gráfico renderiza imediatamente
+ * [BUG-2] toSec() universal — normaliza timestamps ms e s, evita candles em 1970
  */
 
 // ===== ESTADO GLOBAL =====
@@ -22,6 +26,43 @@ let state = {
   news: [],
 };
 
+ ═══════════════════════════════════════════════════════════════════════════
+   BLOCO A — Estado do stream (colar após `let state = { ... }`)
+   ═══════════════════════════════════════════════════════════════════════════ */
+ 
+let rtState = {
+  pollTimer  : null,   // fallback polling para ativos não-Binance
+  POLL_MS    : 5_000,  // intervalo de polling (ms)
+  statusEl   : null,   // elemento DOM do badge de status (opcional)
+};
+ 
+// Atualiza badge de status no header do gráfico (se existir #rt-status no HTML)
+function _setRtBadge(status) {
+  if (!rtState.statusEl) {
+    rtState.statusEl = document.getElementById('rt-status');
+  }
+  if (!rtState.statusEl) return;
+ 
+  const MAP = {
+    connecting  : { text: '⟳ Conectando',   cls: 'rt-connecting'   },
+    live        : { text: '● AO VIVO',       cls: 'rt-live'         },
+    reconnecting: { text: '↺ Reconectando',  cls: 'rt-reconnecting' },
+    stopped     : { text: '○ Offline',        cls: 'rt-stopped'      },
+    polling     : { text: '⏱ Polling 5s',    cls: 'rt-polling'      },
+  };
+ 
+  const info = MAP[status] || MAP.stopped;
+  rtState.statusEl.textContent  = info.text;
+  rtState.statusEl.className    = `rt-badge ${info.cls}`;
+}
+ 
+// Para todos os streams ativos (WebSocket + polling)
+function _stopAllStreams() {
+  if (typeof RealtimeStream !== 'undefined') RealtimeStream.stop();
+  clearInterval(rtState.pollTimer);
+  rtState.pollTimer = null;
+}
+
 const TIMEFRAMES = [
   { key: '5m',  label: '5M',    desc: 'Scalping' },
   { key: '15m', label: '15M',   desc: 'Day Trade curto' },
@@ -42,6 +83,21 @@ const INDICATORS_CONFIG = [
   { key: 'sar',     label: 'SAR',      color: '#ffd600' },
   { key: 'volume',  label: 'Volume',   color: '#37474f' },
 ];
+
+// ===== [BUG-2 FIX] TIMESTAMP UNIVERSAL =====
+// Normaliza qualquer timestamp para segundos (formato exigido pelo lightweight-charts).
+// Binance retorna ms (13 dígitos), Frankfurt/BRAPI podem retornar ms ou s dependendo
+// do fallback. Se > 1e10 assume ms e divide por 1000; caso contrário já está em segundos.
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BLOCO B — updateChart() com suporte a .update() do lightweight-charts
+   Substitui a função updateChart() existente integralmente.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function toSec(t) {
+  if (!t || !Number.isFinite(t)) return 0;
+  return t > 1e10 ? Math.floor(t / 1000) : Math.floor(t);
+}
 
 // ===== INIT =====
 window.addEventListener('DOMContentLoaded', () => {
@@ -159,8 +215,17 @@ function populateAssetList() {
   keys.slice(0, 10).forEach(key => {
     DataLayer.getQuote(key).then(q => {
       if (q) updateAssetItemPrice(key, q);
-    });
+    }).catch(() => {});
   });
+
+  // ── [BUG-1 FIX] Auto-selecionar primeiro ativo (BTC/USDT) ──────────────────
+  // Sem isso, o gráfico nunca renderiza até o usuário clicar manualmente.
+  // Aguarda 1 tick para garantir que o DOM da lista já foi pintado antes do fetch.
+  const defaultAsset = keys.find(k => k === 'BTC/USDT') || keys[0];
+  if (defaultAsset) {
+    setTimeout(() => selectAsset(defaultAsset), 0);
+  }
+  // ────────────────────────────────────────────────────────────────────────────
 }
 
 function renderAssetList(keys) {
@@ -197,12 +262,41 @@ function filterAssets() {
 }
 
 // ===== SELECIONAR ATIVO =====
-async function selectAsset(key) {
-  state.selectedAsset = key;
-  filterAssets(); // Re-render pra marcar active
-  document.getElementById('chart-title').textContent = key;
-  await loadAssetData(key);
+/* ═══════════════════════════════════════════════════════════════════════════
+   BLOCO C — selectAsset() com limpeza de stream anterior
+   Substitui a função selectAsset() existente integralmente.
+   ═══════════════════════════════════════════════════════════════════════════ */
+ 
+async function selectAsset(assetKey) {
+  if (!ASSETS[assetKey]) return;
+ 
+  // Para stream do ativo anterior antes de trocar
+  _stopAllStreams();
+ 
+  // Atualiza estado e UI
+  state.selectedAsset = assetKey;
+ 
+  // Marca botão ativo na sidebar
+  document.querySelectorAll('.asset-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.asset === assetKey);
+  });
+ 
+  // Atualiza título do painel
+  const titleEl = document.getElementById('asset-title');
+  if (titleEl) titleEl.textContent = ASSETS[assetKey].label || assetKey;
+ 
+  // Reseta badge enquanto carrega
+  _setRtBadge('connecting');
+ 
+  // Carrega histórico + inicia stream
+  await updateChart();
+ 
+  // Dispara análise IA em paralelo (não bloqueia o gráfico)
+  if (typeof runAnalysis === 'function') {
+    runAnalysis().catch(err => console.warn('[AI] Análise falhou:', err));
+  }
 }
+ 
 
 async function loadAssetData(key) {
   showChartLoading(true);
@@ -247,16 +341,138 @@ async function loadAssetData(key) {
 }
 
 // ===== CHART RENDER =====
-function updateChart(candles) {
-  const data = candles.map(c => ({
-    time: Math.floor(c.time / 1000),
-    open: c.open, high: c.high, low: c.low, close: c.close,
-  }));
-  const volData = candles.map(c => ({
-    time: Math.floor(c.time / 1000),
-    value: c.volume,
-    color: c.close >= c.open ? 'rgba(0,200,83,0.5)' : 'rgba(255,23,68,0.4)',
-  }));
+async function updateChart() {
+  if (!state.selectedAsset || !state.candleSeries) return;
+ 
+  const { symbol } = ASSETS[state.selectedAsset] || {};
+  if (!symbol) return;
+ 
+  try {
+    // Busca histórico completo (REST)
+    const candles = await DataLayer.getCandles(symbol, state.selectedTF);
+    if (!candles || candles.length === 0) return;
+ 
+    // Normaliza timestamps (fix Bug 2 — toSec universal)
+    const normalized = candles.map(c => ({
+      time  : toSec(c.time),
+      open  : c.open,
+      high  : c.high,
+      low   : c.low,
+      close : c.close,
+    }));
+ 
+    state.candles = normalized;
+    state.candleSeries.setData(normalized);
+ 
+    // Atualiza indicadores (volume, EMA, Bollinger, SAR…)
+    if (typeof updateIndicators === 'function') updateIndicators(normalized);
+ 
+    // Posiciona view no candle mais recente
+    state.chart.timeScale().scrollToRealTime();
+ 
+    // ── Inicia stream em tempo real ───────────────────────────────────────
+    _stopAllStreams();
+    _startRealtime(state.selectedAsset, state.selectedTF);
+ 
+  } catch (err) {
+    console.error('[CHART] Erro ao carregar candles:', err);
+  }
+}
+ 
+/**
+ * Inicia WebSocket Binance (se suportado) ou polling REST como fallback.
+ */
+function _startRealtime(assetKey, interval) {
+  const asset  = ASSETS[assetKey];
+  if (!asset) return;
+ 
+  const { symbol } = asset;
+ 
+  // ── Caminho 1: WebSocket Binance (crypto com USDT/BTC/ETH/BNB) ───────────
+  if (typeof RealtimeStream !== 'undefined' && RealtimeStream.isSupported(symbol)) {
+    RealtimeStream.start(
+      symbol,
+      interval,
+ 
+      // onTick — chamado a cada frame Binance (milissegundos)
+      (tick) => {
+        if (!state.candleSeries) return;
+ 
+        // lightweight-charts.update() é inteligente:
+        //   • mesmo timestamp → atualiza a vela existente
+        //   • timestamp novo  → acrescenta nova vela
+        state.candleSeries.update({
+          time : tick.time,
+          open : tick.open,
+          high : tick.high,
+          low  : tick.low,
+          close: tick.close,
+        });
+ 
+        // Atualiza volume series se existir
+        if (state.volumeSeries) {
+          state.volumeSeries.update({
+            time : tick.time,
+            value: tick.volume,
+            color: tick.close >= tick.open
+              ? 'rgba(38,166,154,0.5)'
+              : 'rgba(239,83,80,0.5)',
+          });
+        }
+ 
+        // Atualiza preço no header a cada tick ao vivo
+        _updateLivePrice(tick.close, symbol);
+      },
+ 
+      // onStatus — badge visual no painel
+      _setRtBadge
+    );
+ 
+    return; // WebSocket ativo — não usa polling
+  }
+ 
+  // ── Caminho 2: Polling REST para ativos sem WebSocket Binance ─────────────
+  _setRtBadge('polling');
+  console.log(`[RT] Polling REST ${rtState.POLL_MS}ms para ${symbol}`);
+ 
+  rtState.pollTimer = setInterval(async () => {
+    try {
+      const candles = await DataLayer.getCandles(symbol, interval, 2); // só últimas 2 velas
+      if (!candles || candles.length === 0 || !state.candleSeries) return;
+ 
+      const last = candles[candles.length - 1];
+      state.candleSeries.update({
+        time : toSec(last.time),
+        open : last.open,
+        high : last.high,
+        low  : last.low,
+        close: last.close,
+      });
+ 
+      _updateLivePrice(last.close, symbol);
+    } catch (_) {}
+  }, rtState.POLL_MS);
+}
+ 
+/**
+ * Atualiza preço ao vivo no elemento #live-price (se existir no HTML).
+ */
+function _updateLivePrice(price, symbol) {
+  const el = document.getElementById('live-price');
+  if (!el) return;
+ 
+  const fmt = new Intl.NumberFormat('en-US', {
+    style                : 'currency',
+    currency             : 'USD',
+    minimumFractionDigits: price < 1 ? 6 : 2,
+    maximumFractionDigits: price < 1 ? 6 : 2,
+  });
+ 
+  el.textContent = fmt.format(price);
+  el.classList.add('price-flash'); // adiciona classe CSS de flash (opcional)
+  setTimeout(() => el.classList.remove('price-flash'), 300);
+}
+  // ────────────────────────────────────────────────────────────────────────────
 
   state.candleSeries.setData(data);
   state.volumeSeries.setData(volData);
@@ -282,9 +498,13 @@ function renderIndicatorsOnChart() {
   if (!state.techAnalysis || !state.candles.length) return;
 
   const closes = state.candles.map(c => c.close);
+
+  // ── [BUG-2 FIX] toSec() também nos indicadores ────────────────────────────
   const toTimeSeries = (arr) => state.candles
-    .map((c, i) => arr[i] != null ? { time: Math.floor(c.time / 1000), value: arr[i] } : null)
-    .filter(Boolean);
+    .map((c, i) => arr[i] != null ? { time: toSec(c.time), value: arr[i] } : null)
+    .filter(Boolean)
+    .filter(p => p.time > 0);
+  // ────────────────────────────────────────────────────────────────────────────
 
   const addLine = (data, color, lineWidth = 1, lineStyle = 0) => {
     const s = state.chartInstance.addLineSeries({ color, lineWidth, lineStyle, priceLineVisible: false, lastValueVisible: false });
@@ -325,8 +545,8 @@ function renderIndicatorsOnChart() {
   }
   if (state.activeIndicators.has('sar')) {
     const sarData = TechnicalEngine.parabolicSAR(state.candles);
-    const bullSAR = state.candles.map((c, i) => sarData[i]?.isLong ? { time: Math.floor(c.time / 1000), value: sarData[i].value } : null).filter(Boolean);
-    const bearSAR = state.candles.map((c, i) => sarData[i] && !sarData[i].isLong ? { time: Math.floor(c.time / 1000), value: sarData[i].value } : null).filter(Boolean);
+    const bullSAR = state.candles.map((c, i) => sarData[i]?.isLong ? { time: toSec(c.time), value: sarData[i].value } : null).filter(Boolean);
+    const bearSAR = state.candles.map((c, i) => sarData[i] && !sarData[i].isLong ? { time: toSec(c.time), value: sarData[i].value } : null).filter(Boolean);
     const s1 = state.chartInstance.addLineSeries({ color: '#69f0ae', lineWidth: 0, pointMarkersVisible: true, lastValueVisible: false });
     const s2 = state.chartInstance.addLineSeries({ color: '#ff4081', lineWidth: 0, pointMarkersVisible: true, lastValueVisible: false });
     s1.setData(bullSAR); s2.setData(bearSAR);
@@ -467,7 +687,7 @@ function renderSRLevels() {
   }).join('');
 }
 
-// ===== CALENDÁRIO ===== 
+// ===== CALENDÁRIO =====
 function renderCalendarRisk() {
   const risks = ExternalFactors.getCalendarRisk();
   const container = document.getElementById('cal-panel');
@@ -491,14 +711,12 @@ function updateConfluenceDisplay() {
   const fs = ExternalFactors.calculateFinalScore();
   const regime = ExternalFactors.detectMarketRegime(state.candles);
 
-  // Needle
   const techNorm = ta ? ((ta.bullScore - ta.bearScore) / (ta.bullScore + ta.bearScore || 1) * 50 + 50) : 50;
   const extNorm = (fs.score + 100) / 2;
   const patNorm = pr ? ((pr.bullScore - pr.bearScore) / (pr.bullScore + pr.bearScore + 0.001) * 50 + 50) : 50;
   const totalNorm = Math.round((techNorm * 0.45 + extNorm * 0.35 + patNorm * 0.20));
   document.getElementById('conf-needle').style.left = `${totalNorm}%`;
 
-  // Badges
   const techDir = ta?.direction || '--';
   const techConf = ta?.confidence || '--';
   document.getElementById('cf-tech').textContent = `${techDir} ${techConf}%`;
@@ -509,7 +727,6 @@ function updateConfluenceDisplay() {
   document.getElementById('cf-risk').textContent = fs.riskLevel?.toUpperCase() || '--';
   document.getElementById('cf-risk').className = `ind-val ${fs.riskLevel === 'extremo' ? 'bear' : fs.riskLevel === 'alto' ? 'neutral' : 'bull'}`;
 
-  // Regime
   const regimeMap = { tendencia_alta: '📈 Tendência Alta', tendencia_baixa: '📉 Tendência Baixa', volatil: '⚡ Volátil', lateral: '↔️ Lateral', desconhecido: '❓ Desconhecido' };
   document.getElementById('regime-badge').textContent = regimeMap[regime.regime] || regime.regime;
 }
@@ -967,7 +1184,7 @@ setInterval(() => {
   if (state.selectedAsset) {
     DataLayer.getQuote(state.selectedAsset).then(q => {
       if (q) { state.quote = q; updateQuoteDisplay(state.selectedAsset, q); }
-    });
+    }).catch(() => {});
     renderCalendarRisk();
   }
 }, 60000);

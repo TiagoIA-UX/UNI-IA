@@ -7,6 +7,10 @@ zairyx-blog/.vercel/
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
+*.jsonl
+.env
+node_modules/
 
 # Environment secrets
 .env
