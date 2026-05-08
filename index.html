@@ -780,12 +780,26 @@
 
       <!-- Chart principal -->
       <div id="chart-container">
-        <div id="chart"></div>
-        <div id="volume-chart"></div>
-        <div class="loading-overlay" id="chart-loading">
-          <div class="spinner"></div>
-          <div class="loading-text">Carregando dados...</div>
-        </div>
+        <div class="tradingview-widget-container" style="height:100%;width:100%">
+  <div id="tradingview_bybit"></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script type="text/javascript">
+  new TradingView.widget({
+    "autosize": true,
+    "symbol": "BYBIT:BTCUSDT",
+    "interval": "60",
+    "timezone": "America/Sao_Paulo",
+    "theme": "dark",
+    "style": "1",
+    "locale": "br",
+    "toolbar_bg": "#f1f3f6",
+    "enable_publishing": false,
+    "hide_side_toolbar": false,
+    "allow_symbol_change": true,
+    "container_id": "tradingview_bybit"
+  });
+  </script>
+</div>
       </div>
     </div>
 
