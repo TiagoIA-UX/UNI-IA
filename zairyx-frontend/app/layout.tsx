@@ -34,9 +34,9 @@ export const metadata: Metadata = {
     siteName: 'Boitatá IA',
   },
   icons: {
-    icon: '/favicon.png',
-    shortcut: '/favicon.png',
-    apple: '/favicon.png',
+    icon: '/fivicon.png',
+    shortcut: '/fivicon.png',
+    apple: '/fivicon.png',
   },
 }
 
@@ -125,3 +125,4 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     </html>
   )
 }
+
