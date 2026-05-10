@@ -98,6 +98,7 @@
   display: grid;
   grid-template-columns: 280px 1fr 240px;
   flex: 1;
+  height: 100%;
   overflow: hidden;
   gap: 0;
 }
@@ -652,6 +653,7 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  min-height: 0;
 }
 
 /* ── Coluna Direita — Agentes ─────────────────────────────────── */

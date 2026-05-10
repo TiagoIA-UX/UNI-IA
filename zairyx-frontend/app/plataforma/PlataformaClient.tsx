@@ -40,27 +40,27 @@ const AGENTES_BASE: Agente[] = [
 
 // Ativos Mercado Bitcoin - seed inicial, resto carregado via API
 const MB_ATIVOS_SEED: Ativo[] = [
-  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'MERCADOBITCOIN:BTCBRL' },
-  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ETHBRL' },
-  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'MERCADOBITCOIN:SOLBRL' },
-  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'MERCADOBITCOIN:BNBBRL' },
-  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:XRPBRL' },
-  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'MERCADOBITCOIN:ADABRL' },
-  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'MERCADOBITCOIN:DOTBRL' },
-  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'MERCADOBITCOIN:AVAXBRL' },
-  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LINKBRL' },
-  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:DOGEBRL' },
-  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LTCBRL' },
-  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'MERCADOBITCOIN:MATICBRL' },
-  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'MERCADOBITCOIN:UNIBRL' },
-  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'MERCADOBITCOIN:ATOMBRL' },
-  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'MERCADOBITCOIN:NEARBRL' },
-  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ALGOBRL' },
-  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:SANDBRL' },
-  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:MANABRL' },
-  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'MERCADOBITCOIN:FTMBRL' },
-  { simbolo: 'USDT-BRL',  nome: 'Tether',        categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDTBRL' },
-  { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDCBRL' },
+  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'BINANCE:BTCUSDT' },
+  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'BINANCE:ETHUSDT' },
+  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'BINANCE:SOLUSDT' },
+  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'BINANCE:BNBUSDT' },
+  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'BINANCE:XRPUSDT' },
+  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'BINANCE:ADAUSDT' },
+  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'BINANCE:DOTUSDT' },
+  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'BINANCE:AVAXUSDT' },
+  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'BINANCE:LINKUSDT' },
+  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'BINANCE:DOGEUSDT' },
+  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'BINANCE:LTCUSDT' },
+  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'BINANCE:MATICUSDT' },
+  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'BINANCE:UNIUSDT' },
+  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'BINANCE:ATOMUSDT' },
+  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'BINANCE:NEARUSDT' },
+  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'BINANCE:ALGOUSDT' },
+  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'BINANCE:SANDUSDT' },
+  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'BINANCE:MANAUSDT' },
+  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'BINANCE:FTMUSDT' },
+  { simbolo: 'USDT-BRL',  nome: 'Tether',        categoria: 'Stablecoin', tv: 'BINANCE:USDCUSDT' },
+  { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'BINANCE:USDCUSDT' },
 ]
 
 const API_BASE = 'http://127.0.0.1:8000'
@@ -242,7 +242,7 @@ function TradingViewChart({ simboloTV, agentesAtivos }: { simboloTV: string; age
     }
   }, [simboloTV, agentesAtivos.join(',')])
 
-  return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
+  return <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 }
 
 // Componente Principal
