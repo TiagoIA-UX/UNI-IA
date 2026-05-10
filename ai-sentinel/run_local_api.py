@@ -1,20 +1,16 @@
-import os
-import sys
-from pathlib import Path
-
+"""
+UNI IA — Backend Launcher
+Inicia o servidor FastAPI local sem WebSocket (compatível Windows)
+"""
 import uvicorn
-
-
-ROOT_DIR = Path(__file__).resolve().parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
 
 if __name__ == "__main__":
     uvicorn.run(
         "api.main:app",
-        host=os.getenv("UNI_IA_API_HOST", "127.0.0.1"),
-        port=int(os.getenv("UNI_IA_API_PORT", "8000")),
+        host="127.0.0.1",
+        port=8000,
+        reload=False,
         ws="none",
         http="h11",
+        log_level="info"
     )
