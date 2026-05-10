@@ -1,0 +1,88 @@
+/* BOITATÁ IA — Design System Global */
+*, *::before, *::after { box-sizing: border-box; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
+img, video { max-width: 100%; display: block; }
+a { color: inherit; }
+
+:root {
+  --color-primary: #1a3a1a;
+  --color-gold:    #c8860a;
+  --color-fire:    #ff6b00;
+  --color-dark:    #0a0a0a;
+  --color-earth:   #5c3317;
+  --surface-0: #07090a;
+  --surface-1: #0d160d;
+  --surface-2: #111a11;
+  --surface-3: #162016;
+  --surface-4: #1e2e1e;
+  --text-primary:   #f0ede6;
+  --text-secondary: #b8b0a0;
+  --text-muted:     #7a7060;
+  --border-subtle: rgba(200, 134, 10, 0.12);
+  --border-medium: rgba(200, 134, 10, 0.28);
+  --border-strong: rgba(200, 134, 10, 0.55);
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger:  #ef4444;
+  --font-playfair: 'Playfair Display', Georgia, serif;
+  --font-inter:    'Inter', ui-sans-serif, system-ui, sans-serif;
+  --shadow-gold: 0 4px 20px rgba(200, 134, 10, 0.22);
+  --shadow-dark: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-full: 9999px;
+  --transition: 0.15s ease;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-playfair); color: var(--text-primary); line-height: 1.2; margin: 0 0 0.5em; }
+p, span, li, td, th, label, input, select, textarea, button { font-family: var(--font-inter); }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 1.35rem; border-radius: var(--radius-full); font-family: var(--font-inter); font-weight: 700; font-size: 0.9rem; cursor: pointer; border: none; text-decoration: none; transition: opacity var(--transition), transform var(--transition); }
+.btn:hover { opacity: 0.85; transform: translateY(-1px); }
+.btn-primario { background: linear-gradient(120deg, var(--color-gold), var(--color-fire)); color: var(--color-dark); box-shadow: var(--shadow-gold); }
+.btn-secundario { background: var(--color-primary); color: var(--text-primary); border: 1px solid var(--border-medium); }
+.btn-contorno { background: transparent; color: var(--color-gold); border: 1px solid var(--border-strong); }
+.btn-contorno:hover { background: rgba(200, 134, 10, 0.08); opacity: 1; }
+
+.card { background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.25rem; transition: border-color var(--transition), box-shadow var(--transition); }
+.card:hover { border-color: var(--border-medium); box-shadow: var(--shadow-dark); }
+
+.badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.28rem 0.75rem; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; }
+.badge-oportunidade { background: rgba(34,197,94,0.12); color: var(--color-success); border: 1px solid rgba(34,197,94,0.3); }
+.badge-neutro { background: rgba(200,134,10,0.12); color: var(--color-gold); border: 1px solid var(--border-medium); }
+.badge-risco { background: rgba(239,68,68,0.12); color: var(--color-danger); border: 1px solid rgba(239,68,68,0.3); }
+
+/* Agentes-Animais */
+.agente-aegis     { --agente-cor: #ff4d4d; }
+.agente-sentinel  { --agente-cor: #f472b6; }
+.agente-atlas     { --agente-cor: #38bdf8; }
+.agente-orion     { --agente-cor: #fb923c; }
+.agente-macro     { --agente-cor: #a78bfa; }
+.agente-news      { --agente-cor: #facc15; }
+.agente-sentiment { --agente-cor: #34d399; }
+.agente-argus     { --agente-cor: #4ade80; }
+
+.card-agente { background: var(--surface-2); border: 1px solid var(--border-subtle); border-left: 3px solid var(--agente-cor, var(--color-gold)); border-radius: var(--radius-md); padding: 1rem 1.1rem; transition: all var(--transition); }
+.card-agente:hover { border-color: var(--agente-cor, var(--color-gold)); box-shadow: 0 4px 18px rgba(0,0,0,0.45); transform: translateY(-1px); }
+.card-agente .agente-titulo { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--agente-cor, var(--color-gold)); margin: 0 0 0.1rem; }
+.card-agente .agente-animal { font-size: 0.7rem; color: var(--text-muted); margin: 0 0 0.65rem; }
+.card-agente .score-barra-fundo { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; margin-top: 0.5rem; overflow: hidden; }
+.card-agente .score-barra-fill { height: 100%; border-radius: 2px; background: var(--agente-cor, var(--color-gold)); transition: width 0.6s ease; }
+
+/* Dízimo Amazônia */
+.dizimo-barra { background: linear-gradient(90deg,#0d1f0d,#1a3a0a); border: 1px solid rgba(34,197,94,0.22); border-radius: var(--radius-md); padding: 0.9rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.dizimo-barra .dizimo-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-success); white-space: nowrap; }
+.dizimo-barra .dizimo-progresso { flex: 1; min-width: 80px; height: 6px; background: rgba(255,255,255,0.07); border-radius: 3px; overflow: hidden; }
+.dizimo-barra .dizimo-fill { height: 100%; background: linear-gradient(90deg,#22c55e,#86efac); border-radius: 3px; transition: width 0.7s ease; }
+.dizimo-barra .dizimo-valor { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+
+/* Utilitários */
+.texto-dourado { color: var(--color-gold); }
+.texto-fogo { color: var(--color-fire); }
+.titulo-secao { font-family: var(--font-playfair); font-size: clamp(1.6rem,3vw,2.2rem); font-weight: 700; color: var(--text-primary); margin: 0 0 0.4rem; }
+.subtitulo-secao { font-size: 1rem; color: var(--text-secondary); line-height: 1.65; margin: 0 0 2rem; }
+.divisor { border: none; border-top: 1px solid var(--border-subtle); margin: 2.5rem 0; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface-1); }
+::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-gold); }

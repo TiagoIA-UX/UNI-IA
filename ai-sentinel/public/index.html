@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNI IA — Dashboard de Elite</title>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg: #0a0e1a; --bg2: #0f1629; --bg3: #141c35; --border: #1e2d50;
+    --accent: #2962ff; --green: #00c853; --red: #ff1744; --text: #e8eaf6;
+  }
+  body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding-bottom: 50px; }
+  
+  /* HEADER */
+  .header { background: var(--bg2); padding: 15px 25px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .logo { font-size: 20px; font-weight: 800; color: #00e5ff; }
+  
+  /* GRID PRINCIPAL */
+  .layout { display: grid; grid-template-columns: 1fr 350px; gap: 15px; padding: 15px; }
+
+  /* GRÁFICO */
+  .card { background: var(--bg2); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 15px; }
+  .card-header { padding: 12px; background: var(--bg3); font-weight: bold; display: flex; justify-content: space-between; }
+  #chart-container { height: 500px; width: 100%; }
+
+  /* BOTÕES DE COMPRA E VENDA */
+  .trade-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; }
+  .btn-buy { background: var(--green); color: #000; padding: 15px; border-radius: 8px; border: none; font-weight: 900; cursor: pointer; font-size: 16px; }
+  .btn-sell { background: var(--red); color: #fff; padding: 15px; border-radius: 8px; border: none; font-weight: 900; cursor: pointer; font-size: 16px; }
+
+  /* RADAR DE MOEDAS (O RELATÓRIO ABAIXO) */
+  .radar-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .radar-table th { text-align: left; padding: 12px; color: #90a4ae; font-size: 12px; text-transform: uppercase; }
+  .radar-table td { padding: 15px 12px; border-top: 1px solid var(--border); font-size: 14px; }
+  .prob-badge { background: rgba(0, 229, 255, 0.1); color: #00e5ff; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+  
+  .status-compra { color: var(--green); font-weight: bold; }
+  .status-venda { color: var(--red); font-weight: bold; }
+
+  /* PAINEL LATERAL */
+  .side-panel { display: flex; flex-direction: column; gap: 15px; }
+  .mentor-box { padding: 15px; line-height: 1.6; font-size: 14px; color: #b0bec5; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">UNI IA — MENTOR DE ESTRATÉGIA</div>
+  <div>🟢 Conectado à Bybit | <span style="color:var(--green)">Precisão: 85%</span></div>
+</header>
+
+<div class="layout">
+  
+  <main>
+    <div class="card">
+      <div class="card-header">
+        <span id="active-asset">BITCOIN (BTC/USDT)</span>
+        <span style="color:var(--green)">Tempo: 1 Hora</span>
+      </div>
+      <div id="chart-container">
+        <div id="tradingview_widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+          function loadChart(symbol) {
+            new TradingView.widget({
+              "autosize": true,
+              "symbol": "BYBIT:" + symbol.replace("/", ""),
+              "interval": "60",
+              "theme": "dark",
+              "style": "1",
+              "locale": "br",
+              "container_id": "tradingview_widget"
+            });
+          }
+          loadChart("BTC/USDT"); // Inicia com Bitcoin
+        </script>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">📊 Radar de Oportunidades (Outras Moedas)</div>
+      <table class="radar-table">
+        <thead>
+          <tr>
+            <th>Moeda</th>
+            <th>Sugestão</th>
+            <th>Acerto Est.</th>
+            <th>Tendência</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Ethereum (ETH)</strong></td>
+            <td class="status-compra">COMPRA</td>
+            <td><span class="prob-badge">78%</span></td>
+            <td>Subida Leve</td>
+            <td><button onclick="loadChart('ETH/USDT')" style="cursor:pointer; background:var(--accent); color:white; border:none; padding:5px 10px; border-radius:4px;">Ver Gráfico</button></td>
+          </tr>
+          <tr>
+            <td><strong>Solana (SOL)</strong></td>
+            <td class="status-venda">VENDA</td>
+            <td><span class="prob-badge">81%</span></td>
+            <td>Descida Forte</td>
+            <td><button onclick="loadChart('SOL/USDT')" style="cursor:pointer; background:var(--accent); color:white; border:none; padding:5px 10px; border-radius:4px;">Ver Gráfico</button></td>
+          </tr>
+          <tr>
+            <td><strong>Cardano (ADA)</strong></td>
+            <td>ESPERAR</td>
+            <td><span class="prob-badge">--</span></td>
+            <td>Lateral</td>
+            <td><button onclick="loadChart('ADA/USDT')" style="cursor:pointer; background:var(--accent); color:white; border:none; padding:5px 10px; border-radius:4px;">Ver Gráfico</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <aside class="side-panel">
+    <div class="card">
+      <div class="card-header">🎯 Veredito da IA</div>
+      <div style="text-align:center; padding:20px;">
+        <h2 style="color:var(--green); margin:0;">COMPRA FORTE 🚀</h2>
+        <p style="font-size:12px; opacity:0.6;">Probabilidade de acerto: 82%</p>
+      </div>
+      
+      <div class="trade-actions">
+        <button class="btn-buy" onclick="alert('Integração de Compra em breve!')">COMPRAR</button>
+        <button class="btn-sell" onclick="alert('Integração de Venda em breve!')">VENDER</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">💡 Explicação do Mentor</div>
+      <div class="mentor-box">
+        "O Bitcoin está mostrando muita força compradora no tempo de 1 hora. O volume está subindo e as baleias estão entrando. É uma oportunidade clara de lucro, mas lembre-se: se o preço cair abaixo de X, a gente sai da operação para proteger o capital!"
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">🛡️ Gerenciamento de Risco</div>
+      <div style="padding:15px; font-size:13px;">
+        Mantenha sempre o seu <strong>Stop Loss</strong> (Limite de Perda) ativado. O mercado de cripto é volátil!
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+</body>
+</html>
