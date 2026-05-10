@@ -1,0 +1,12 @@
+node_modules
+.next
+.env*
+!.env.example
+.env*.local
+
+# === UNI IA SEGURANCA — NAO REMOVER ===
+.env.local
+.env*.local
+.env.production
+.secrets-backup/
+*.bak

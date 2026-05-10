@@ -1,0 +1,22 @@
+.body { margin: 0; font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif; background: radial-gradient(circle at 10% 10%, #0f2010 0%, #070d07 40%, #0a0a0a 100%); color: #f0ede6; display: flex; flex-direction: column; min-height: 100vh; }
+.header { border-bottom: 1px solid rgba(200,134,10,0.25); background: rgba(10,10,10,0.88); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); position: sticky; top: 0; z-index: 50; }
+.headerInner { max-width: 1120px; margin: 0 auto; padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.brandRow { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: inherit; }
+.brandTitle { font-family: var(--font-playfair), Georgia, serif; font-size: 1.1rem; font-weight: 700; margin: 0; color: #f0ede6; line-height: 1.2; }
+.brandTitleSub { font-weight: 400; color: #c8860a; font-style: italic; }
+.brandTagline { margin: 0.15rem 0 0; font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: #ff6b00; }
+.nav { display: flex; gap: 0.6rem; font-size: 0.85rem; font-weight: 600; align-items: center; flex-wrap: wrap; }
+.navBtnPlatform { background: linear-gradient(120deg,#c8860a,#ff6b00); color: #0a0a0a; padding: 0.45rem 1rem; border-radius: 9999px; text-decoration: none; font-weight: 700; font-size: 0.84rem; box-shadow: 0 4px 14px rgba(200,134,10,0.35); transition: opacity 0.15s; }
+.navBtnPlatform:hover { opacity: 0.85; }
+.navBtnLogin { background: #1a3a1a; color: #f0ede6; padding: 0.45rem 1rem; border-radius: 9999px; text-decoration: none; font-size: 0.84rem; border: 1px solid rgba(200,134,10,0.4); transition: border-color 0.15s; }
+.navBtnLogin:hover { border-color: #c8860a; }
+.navBtnSignout { border: 1px solid rgba(240,237,230,0.2); color: #8a8070; padding: 0.45rem 1rem; border-radius: 9999px; text-decoration: none; font-size: 0.84rem; transition: all 0.15s; }
+.navBtnSignout:hover { border-color: rgba(240,237,230,0.45); color: #c0b8a8; }
+.navBtnTelegram { background: #1a3a1a; color: #c8860a; border: 1px solid rgba(200,134,10,0.3); padding: 0.45rem 1rem; border-radius: 9999px; text-decoration: none; font-size: 0.84rem; transition: all 0.15s; }
+.navBtnTelegram:hover { background: rgba(200,134,10,0.1); border-color: rgba(200,134,10,0.55); }
+.main { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 2.5rem 1.25rem; }
+.footer { padding: 2rem 1.5rem; text-align: center; font-size: 0.78rem; color: #5a5040; border-top: 1px solid rgba(200,134,10,0.12); background: rgba(10,10,10,0.55); }
+.footerBrand { color: #8a8070; font-weight: 600; margin: 0 0 0.25rem; }
+.footerMission { color: #c8860a; font-weight: 700; font-size: 0.85rem; margin: 0 0 0.5rem; letter-spacing: 0.02em; }
+.footerNav { margin: 0.5rem 0; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
+.footerDisclaimer { margin-top: 0.75rem; max-width: 820px; margin-left: auto; margin-right: auto; line-height: 1.65; color: #3a3025; font-size: 0.74rem; }
