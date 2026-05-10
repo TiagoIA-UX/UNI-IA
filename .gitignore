@@ -1,30 +1,37 @@
-# Node/Next
-node_modules/
-.next/
-zairyx-blog/.next/
-zairyx-blog/.vercel/
-
 # Python
 __pycache__/
-*.py[cod]
 *.pyc
-*.jsonl
-.env
-node_modules/
+*.pyo
+.venv/
+venv/
+*.egg-info/
 
-# Environment secrets
+# Node
+node_modules/
+.next/
+.vercel/
+
+# Ambiente
 .env
 .env.local
-.env.*
-!.env.example
-
-# Workspace app env
-zairyx-blog/.env
-zairyx-blog/.env.local
-zairyx-blog/.env.*
-!zairyx-blog/.env.example
-
-# Secret backups
+.env*.local
 .secrets-backup/
-*.bak
-*.backup
+
+# Logs e runtime
+runtime_logs/
+*.jsonl
+*.log
+
+# Scripts temporários soltos na raiz
+Analisar-Branches.ps1
+Ler-Arquivos-Tarefa2.ps1
+aplicar-tarefa1.ps1
+consolidar_env.ps1
+fix_plataforma.ps1
+run_backend.py
+run_uni_ia.py
+start_uni_ia.py
+
+# OS
+.DS_Store
+Thumbs.db
