@@ -39,14 +39,14 @@ const AGENTES: AgentScore[] = [
 
 // ── Ativos do Mercado Bitcoin ─────────────────────────────────────────────
 const ATIVOS = [
-  { symbol: 'MERCADOBITCOIN:BTCBRL',  label: 'Bitcoin',   sigla: 'BTC',  icon: '₿' },
-  { symbol: 'MERCADOBITCOIN:ETHBRL',  label: 'Ethereum',  sigla: 'ETH',  icon: 'Ξ' },
-  { symbol: 'MERCADOBITCOIN:SOLBRL',  label: 'Solana',    sigla: 'SOL',  icon: 'S' },
-  { symbol: 'MERCADOBITCOIN:ADABRL',  label: 'Cardano',   sigla: 'ADA',  icon: 'A' },
-  { symbol: 'MERCADOBITCOIN:XRPBRL',  label: 'Ripple',    sigla: 'XRP',  icon: 'X' },
-  { symbol: 'MERCADOBITCOIN:DOGEBRL', label: 'Dogecoin',  sigla: 'DOGE', icon: 'D' },
-  { symbol: 'MERCADOBITCOIN:LTCBRL',  label: 'Litecoin',  sigla: 'LTC',  icon: 'L' },
-  { symbol: 'MERCADOBITCOIN:LINKBRL', label: 'Chainlink', sigla: 'LINK', icon: '⬡' },
+  { symbol: 'BITSTAMP:BTCBRL',  label: 'Bitcoin',   sigla: 'BTC',  icon: '₿' },
+  { symbol: 'BITSTAMP:ETHUSD',  label: 'Ethereum',  sigla: 'ETH',  icon: 'Ξ' },
+  { symbol: 'BITSTAMP:SOLUSD',  label: 'Solana',    sigla: 'SOL',  icon: 'S' },
+  { symbol: 'BITSTAMP:ADAUSD',  label: 'Cardano',   sigla: 'ADA',  icon: 'A' },
+  { symbol: 'BITSTAMP:XRPUSD',  label: 'Ripple',    sigla: 'XRP',  icon: 'X' },
+  { symbol: 'BITSTAMP:DOGEUSD', label: 'Dogecoin',  sigla: 'DOGE', icon: 'D' },
+  { symbol: 'BITSTAMP:LTCUSD',  label: 'Litecoin',  sigla: 'LTC',  icon: 'L' },
+  { symbol: 'BITSTAMP:LINKUSD', label: 'Chainlink', sigla: 'LINK', icon: '⬡' },
 ]
 
 const API_BASE = 'http://127.0.0.1:8000'
@@ -430,3 +430,4 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
     </div>
   )
 }
+
