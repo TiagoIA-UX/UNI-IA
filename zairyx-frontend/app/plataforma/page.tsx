@@ -23,5 +23,5 @@ export default async function PlataformaPage() {
     redirect('/login?error=unauthorized')
   }
 
-  return <PlataformaClient />
+  return <PlataformaClient userEmail={user.email ?? ''} />
 }

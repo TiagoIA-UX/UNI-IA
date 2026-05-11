@@ -155,6 +155,7 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         signals: List[AgentSignal],
         signal_id: Optional[str] = None,
         regime_context: Optional[RegimeContext] = None,
+        chart_timeframe: Optional[str] = None,
     ) -> OpportunityAlert:
         """Fusao ponderada dos sinais dos agentes."""
         weights = self._get_effective_weights(regime_context=regime_context)
@@ -238,16 +239,17 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         explanation = require_non_empty_string(data["explanation"], "explanation")
         confluence_level = normalize_confluence_level(data["confluence_level"])
 
-        # Build StrategyDecision
-        timeframe = self._timeframe(self.default_mode)
+        # Build StrategyDecision — timeframe do grafico (UI) sobrepoe faixa generica do modo
+        mode_tf = self._timeframe(self.default_mode)
+        strategy_tf = chart_timeframe.strip() if chart_timeframe else mode_tf
         strategy = StrategyDecision(
             mode=self.default_mode,
             direction=direction,
-            timeframe=timeframe,
+            timeframe=strategy_tf,
             confidence=min(99.0, max(0.0, score)),
             operational_status=self._operational_status(classification),
             reasons=reasons[:5],
-            execution_hint=self._execution_hint(direction, timeframe, classification),
+            execution_hint=self._execution_hint(direction, strategy_tf, classification),
             regime_id=regime_context.regime_id if regime_context else None,
             regime_label=regime_context.regime_label if regime_context else None,
             regime_version=regime_context.regime_version if regime_context else None,
@@ -284,6 +286,7 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             explanation=explanation,
             sources=[s.agent_name for s in signals],
             strategy=strategy,
+            chart_timeframe=chart_timeframe.strip() if chart_timeframe else None,
         )
 
         return alert

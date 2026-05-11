@@ -309,3 +309,87 @@ class OutcomeTracker:
             },
             "by_asset": by_asset,
         }
+
+    def asset_hit_ranking(
+        self,
+        *,
+        timeframe: str,
+        window_days: int = 90,
+        min_trades: int = 1,
+        sample_limit: int = 20000,
+    ) -> Dict[str, Any]:
+        """Ranking de ativos por taxa de acerto (wins / decisivos) no timeframe informado.
+
+        Usado para prioridade de execucao na mesa. Requer outcomes gravados com o mesmo
+        valor em `timeframe` (ex: 5m, 1h) ao fechar posicao.
+        """
+        norm_tf = (timeframe or "").strip().lower()
+        if not norm_tf:
+            return {"timeframe": None, "window_days": window_days, "items": [], "note": "timeframe_vazio"}
+
+        now = datetime.now(timezone.utc)
+        cutoff_ts = now.timestamp() - (max(int(window_days), 1) * 86400)
+        min_t = max(int(min_trades), 1)
+
+        by_asset: Dict[str, Dict[str, int]] = {}
+        for item in self._iter_outcomes(limit=max(int(sample_limit), 100)):
+            if str(item.get("timeframe", "")).strip().lower() != norm_tf:
+                continue
+            ts_raw = item.get("closed_at") or item.get("recorded_at")
+            try:
+                event_ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00")).timestamp()
+            except Exception:
+                continue
+            if event_ts < cutoff_ts:
+                continue
+            asset = str(item.get("asset", "")).upper().strip()
+            if not asset:
+                continue
+            bucket = by_asset.setdefault(
+                asset,
+                {"wins": 0, "losses": 0, "timeouts": 0, "breakevens": 0},
+            )
+            res = str(item.get("result", "")).lower()
+            if res == "win":
+                bucket["wins"] += 1
+            elif res == "loss":
+                bucket["losses"] += 1
+            elif res == "timeout":
+                bucket["timeouts"] += 1
+            elif res == "breakeven":
+                bucket["breakevens"] += 1
+
+        rows: List[Dict[str, Any]] = []
+        for asset, b in by_asset.items():
+            decisive = int(b["wins"]) + int(b["losses"])
+            total = int(sum(b.values()))
+            hit_rate = round((b["wins"] / decisive) * 100.0, 2) if decisive > 0 else 0.0
+            if total < min_t:
+                tier = "insuficiente"
+            elif total >= 20:
+                tier = "alta_amostra"
+            elif total >= 8:
+                tier = "media"
+            else:
+                tier = "inicial"
+            rows.append(
+                {
+                    "asset": asset,
+                    "trades": total,
+                    "decisive_trades": decisive,
+                    "wins": b["wins"],
+                    "losses": b["losses"],
+                    "timeouts": b["timeouts"],
+                    "breakevens": b["breakevens"],
+                    "hit_rate_pct": hit_rate,
+                    "sample_tier": tier,
+                }
+            )
+
+        rows.sort(key=lambda r: (-float(r["hit_rate_pct"]), -int(r["trades"]), r["asset"]))
+        return {
+            "timeframe": norm_tf,
+            "window_days": int(window_days),
+            "min_trades": min_t,
+            "items": rows,
+        }

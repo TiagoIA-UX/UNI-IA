@@ -34,13 +34,19 @@ from core.system_state import SystemStateManager, SystemStatus, UniIAMode
 class _FakeCopyTradeService:
     def __init__(self):
         self.executions = []
+        self.manual_calls = []
 
     def status(self):
-        return {"enabled": True}
+        return {"enabled": True, "broker_ready": True, "provider": "fake"}
 
     def execute_from_alert(self, alert):
         self.executions.append(alert.asset)
         return {"success": True, "asset": alert.asset}
+
+    def execute_manual_order(self, **kwargs):
+        self.manual_calls.append(kwargs)
+        sym = kwargs.get("symbol", "?")
+        return {"success": True, "payload": {"symbol": sym}, "broker_response": {"ok": True}}
 
 
 class _FakeAuditService:
@@ -300,6 +306,37 @@ class DeskAndScannerTests(unittest.TestCase):
 
             with self.assertRaises(RuntimeError):
                 desk.reject("req-1")
+
+    def test_manual_order_paper_simulated(self):
+        with patch.dict("os.environ", {**self.base_env, "UNI_IA_MODE": "paper"}, clear=False):
+            desk, _ = self._build_desk("paper", "ready")
+            out = desk.execute_manual_order(asset="BTC-USDT", side="BUY", risk_percent=1.0, source="test")
+
+        self.assertEqual(out["action"], "paper_simulated")
+        self.assertEqual(desk.copy_trade_service.manual_calls, [])
+
+    def test_manual_order_live_calls_broker(self):
+        with patch.dict("os.environ", {**self.base_env, "UNI_IA_MODE": "live", "UNI_IA_REQUIRE_APPROVAL": "false"}, clear=False):
+            copy_trade = _FakeCopyTradeService()
+            state = SystemStateManager(UniIAMode.LIVE)
+            state.status = SystemStatus.READY
+            desk = PrivateDesk(
+                copy_trade_service=copy_trade,
+                audit_service=_FakeAuditService(),
+                desk_store=_FakeDeskStore(),
+                system_state=state,
+            )
+            out = desk.execute_manual_order(asset="BTC-USDT", side="COMPRA", source="test")
+
+        self.assertEqual(out["action"], "executed")
+        self.assertEqual(len(copy_trade.manual_calls), 1)
+        self.assertEqual(copy_trade.manual_calls[0]["symbol"], "BTCUSDT")
+
+    def test_manual_order_approval_raises(self):
+        with patch.dict("os.environ", {**self.base_env, "UNI_IA_MODE": "approval"}, clear=False):
+            desk, _ = self._build_desk("approval", "ready")
+            with self.assertRaises(RuntimeError):
+                desk.execute_manual_order(asset="BTCUSDT", side="BUY")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from core.contract_validation import normalize_classification
 from core.schemas import OpportunityAlert, model_to_dict
@@ -130,11 +130,32 @@ class PrivateDesk:
             raise RuntimeError("Request de aprovacao nao encontrada.")
         return req
 
+    @staticmethod
+    def _normalize_desk_asset_key(asset: str) -> str:
+        return (asset or "").strip().upper().replace("-", "").replace("/", "").replace("_", "")
+
     def _is_asset_allowed(self, asset: str, allowed_assets: List[str]) -> bool:
         if not allowed_assets:
             return True
-        normalized = (asset or "").upper()
-        return normalized in allowed_assets
+        n = self._normalize_desk_asset_key(asset)
+        for a in allowed_assets:
+            if self._normalize_desk_asset_key(a) == n:
+                return True
+        return False
+
+    @staticmethod
+    def normalize_trading_symbol(asset: str) -> str:
+        """Alinha simbolos da UI (BTC-BRL, BTCBRL) ao formato esperado pelo broker."""
+        a = (asset or "").strip().upper().replace("-", "").replace("/", "").replace("_", "")
+        if not a:
+            raise RuntimeError("Ativo vazio.")
+        if a.endswith("USDT"):
+            return a
+        if a.endswith("BRL"):
+            return a
+        if a.isalpha() and 2 <= len(a) <= 6:
+            return f"{a}BRL"
+        return a
 
     def _validate_alert(self, alert: OpportunityAlert, cfg: Dict[str, Any]):
         if alert.governance and not alert.governance.approved:
@@ -308,4 +329,116 @@ class PrivateDesk:
             "request_id": request_id,
             "action": "rejected",
             "reason": reason,
+        }
+
+    def execute_manual_order(
+        self,
+        *,
+        asset: str,
+        side: str,
+        risk_percent: float = 1.0,
+        source: str = "plataforma-web",
+        quantity: Optional[str] = None,
+        chart_timeframe: Optional[str] = None,
+        auto_mode_context: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Ordem disparada pela UI ou integracao externa (nao passa pelo pipeline de alerta)."""
+        cfg = self._cfg()
+        norm_asset = self.normalize_trading_symbol(asset)
+        side_raw = (side or "").strip().upper()
+        if side_raw in ("COMPRA", "BUY"):
+            side_u = "BUY"
+        elif side_raw in ("VENDA", "SELL"):
+            side_u = "SELL"
+        else:
+            raise RuntimeError("Lado invalido: use BUY ou SELL (COMPRA/VENDA aceitos).")
+
+        if not self._is_asset_allowed(norm_asset, cfg["allowed_assets"]):
+            raise RuntimeError(
+                f"Ativo {norm_asset} fora da whitelist DESK_ALLOWED_ASSETS."
+            )
+
+        details: Dict[str, Any] = {
+            "symbol": norm_asset,
+            "side": side_u,
+            "risk_percent": risk_percent,
+            "source": source,
+            "chart_timeframe": chart_timeframe,
+            "auto_mode_context": auto_mode_context,
+        }
+
+        if cfg["mode"] == "paper":
+            self._audit(
+                "desk.manual_paper",
+                "success",
+                asset=norm_asset,
+                classification="MANUAL",
+                score=0.0,
+                details=details,
+            )
+            return {
+                "success": True,
+                "mode": cfg["mode"],
+                "action": "paper_simulated",
+                "symbol": norm_asset,
+                "side": side_u,
+                "message": (
+                    "Paper: ordem nao enviada ao broker. "
+                    "Para real no Mercado Bitcoin: UNI_IA_MODE=live, credenciais MB e ativo na whitelist."
+                ),
+            }
+
+        if cfg["mode"] == "approval":
+            self._audit(
+                "desk.manual_blocked_approval_mode",
+                "blocked",
+                asset=norm_asset,
+                classification="MANUAL",
+                score=0.0,
+                details=details,
+            )
+            raise RuntimeError(
+                "Modo approval: a plataforma nao envia ordem manual direta. "
+                "Use UNI_IA_MODE=live para execucao manual real via broker, "
+                "ou o fluxo de sinais IA com aprovacao na mesa (pending/approve)."
+            )
+
+        if self.system_state:
+            self.system_state.require_live_execution()
+
+        self._audit(
+            "desk.manual_execution_requested",
+            "pending",
+            asset=norm_asset,
+            classification="MANUAL",
+            score=0.0,
+            details=details,
+        )
+        result = self.copy_trade_service.execute_manual_order(
+            symbol=norm_asset,
+            side=side_u,
+            quantity=quantity,
+            risk_percent=risk_percent,
+            meta={
+                "source": source,
+                "chart_timeframe": chart_timeframe,
+                "auto_mode_context": auto_mode_context,
+            },
+        )
+        self._audit(
+            "desk.manual_executed",
+            "success",
+            asset=norm_asset,
+            classification="MANUAL",
+            score=0.0,
+            details={**details, "execution": result},
+        )
+        return {
+            "success": True,
+            "mode": cfg["mode"],
+            "action": "executed",
+            "symbol": norm_asset,
+            "side": side_u,
+            "execution": result,
+            "message": "Ordem enviada ao broker.",
         }

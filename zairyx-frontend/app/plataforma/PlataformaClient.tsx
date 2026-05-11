@@ -25,24 +25,51 @@ interface Operacao {
   resultado: { tipo: 'GANHO' | 'PERDA'; variacao: number } | null
 }
 interface Oportunidade {
-  simbolo: string; nome: string; score: number; direcao: 'COMPRA' | 'VENDA' | 'NEUTRO'
+  simbolo: string
+  nome: string
+  score: number | null
+  direcao: 'COMPRA' | 'VENDA' | 'NEUTRO'
+  /** Taxa de acerto historica (wins / decisivos) neste timeframe — exige outcomes gravados. */
+  taxaAcerto: number | null
+  tradesHistorico: number | null
+  amostraTier: string | null
+  classificacao: string | null
 }
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-const TIMEFRAMES = ['M1', 'M5', 'M15', 'H1', 'H4', 'D1'] as const
-type Timeframe = typeof TIMEFRAMES[number]
-
-const TV_INTERVAL: Record<Timeframe, string> = {
-  M1: '1', M5: '5', M15: '15', H1: '60', H4: '240', D1: 'D',
+type TfMeta = {
+  label: string
+  canonical: string
+  tv: string
+  strategy_hint: string
+  agent_alignment?: string
+  /** Alinhado a GET /api/meta/chart-timeframes (motor). */
+  strategy_family?: string
+  strategy_family_note?: string
 }
 
-const TF_ESTRATEGIA: Record<Timeframe, string> = {
-  M1:  'Scalping Agressivo — RSI 3 · VWAP · Spike de Volume',
-  M5:  'Scalping Moderado — RSI 5 · BB 10 · Volume Delta',
-  M15: 'Intraday Rápido — RSI 14 · MACD · BB 20 · VWAP',
-  H1:  'Swing Curto — EMA 20/50 · MACD · RSI 14',
-  H4:  'Swing Longo — EMA 50/200 · RSI · MACD Semanal',
-  D1:  'Posição — EMA 200 · Volume Confirmação · Tendência',
+/** Igual a `core/chart_timeframes.py` — usado se GET /api/meta/chart-timeframes falhar. */
+const FALLBACK_TF_CATALOG: TfMeta[] = [
+  { label: 'M1', canonical: '1m', tv: '1', strategy_hint: 'Micro scalping — VWAP, volume, micro-estrutura', agent_alignment: 'ATLAS + ARGUS lideram; MACRO/NEWS so pano de fundo.', strategy_family: 'intraday_swings' },
+  { label: 'M2', canonical: '2m', tv: '2', strategy_hint: 'Scalping rapido — ritmo curto', agent_alignment: 'Tecnico + volume dominam; sentimento macro peso baixo.', strategy_family: 'intraday_swings' },
+  { label: 'M5', canonical: '5m', tv: '5', strategy_hint: 'Scalping classico — medias curtas + BB', agent_alignment: 'ATLAS central; ORION/NEWS se catalisar volatilidade.', strategy_family: 'intraday_swings' },
+  { label: 'M15', canonical: '15m', tv: '15', strategy_hint: 'Intraday — MACD, RSI 14, VWAP', agent_alignment: 'ATLAS + Trends; MACRO ainda filtro.', strategy_family: 'intraday_swings' },
+  { label: 'M30', canonical: '30m', tv: '30', strategy_hint: 'Intraday swing — medias 20/50', agent_alignment: 'Tecnico + regime; NEWS/SENTIMENT moderados.', strategy_family: 'intraday_swings' },
+  { label: 'H1', canonical: '1h', tv: '60', strategy_hint: 'Swing curto — tendencia intradia', agent_alignment: 'ATLAS + AEGIS; MACRO/ORION mais relevantes.', strategy_family: 'swing_intraday_htf' },
+  { label: 'M90', canonical: '90m', tv: '90', strategy_hint: 'Sessao estendida — ponte para HTF', agent_alignment: 'Similar ao H1 com menos ruido.', strategy_family: 'swing_intraday_htf' },
+  { label: 'H4', canonical: '4h', tv: '240', strategy_hint: 'Swing — estrutura HTF + momentum', agent_alignment: 'MACRO + ATLAS; noticias para eventos.', strategy_family: 'swing_htf' },
+  { label: 'D1', canonical: '1d', tv: 'D', strategy_hint: 'Posicao — regime, gap abertura vs dia anterior', agent_alignment: 'MACRO, Trends, Fundamentalista; ATLAS refino.', strategy_family: 'position_gap_session' },
+  { label: 'W1', canonical: '1wk', tv: 'W', strategy_hint: 'Macro semanal — tendencia dominante', agent_alignment: 'MACRO dominante; tecnico confirmacao.', strategy_family: 'macro_position' },
+  { label: 'MN1', canonical: '1mo', tv: 'M', strategy_hint: 'Ciclo mensal — posicao longa', agent_alignment: 'Fundamental + macro longo; execucao em TF menor.', strategy_family: 'macro_position' },
+  { label: 'Q1', canonical: '3mo', tv: '3M', strategy_hint: 'Contexto trimestral', agent_alignment: 'Visao institucional; operacao sempre em TF menor.', strategy_family: 'macro_position' },
+]
+
+function compactAssetKey(simboloMb: string) {
+  return simboloMb.replace(/-/g, '').toUpperCase()
+}
+
+function resolveTfRow(catalog: TfMeta[] | null, label: string): TfMeta {
+  const rows = catalog ?? FALLBACK_TF_CATALOG
+  return rows.find(r => r.label === label) ?? rows.find(r => r.label === 'H1')!
 }
 
 // ─── Agentes ──────────────────────────────────────────────────────────────────
@@ -82,7 +109,10 @@ const MB_ATIVOS_SEED: Ativo[] = [
   { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDC' },
 ]
 
-const API_BASE = 'http://127.0.0.1:8000'
+const API_BASE =
+  (typeof process !== 'undefined' &&
+    (process.env.NEXT_PUBLIC_AI_API_URL || process.env.NEXT_PUBLIC_API_BASE || '').trim()) ||
+  'http://127.0.0.1:8000'
 
 // ─── Helpers de tempo ─────────────────────────────────────────────────────────
 function pad(n: number) { return String(n).padStart(2, '0') }
@@ -169,8 +199,7 @@ function avaliarEntradaAtrasada(
 }
 
 // ─── TradingView via iframe (único método confiável no Next.js 2025/2026) ──────
-function TradingViewChart({ simboloTV, timeframe }: { simboloTV: string; timeframe: Timeframe }) {
-  const interval = TV_INTERVAL[timeframe]
+function TradingViewChart({ simboloTV, interval }: { simboloTV: string; interval: string }) {
   const estudos = [
     'RSI%40tv-basicstudies',
     'Volume%40tv-basicstudies',
@@ -201,10 +230,11 @@ function TradingViewChart({ simboloTV, timeframe }: { simboloTV: string; timefra
 }
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
-export default function PlataformaClient({ userEmail }: { userEmail: string }) {
+export default function PlataformaClient({ userEmail = '' }: { userEmail?: string }) {
   const [agentes, setAgentes] = useState<Agente[]>(AGENTES_BASE)
   const [ativos, setAtivos] = useState<Ativo[]>(MB_ATIVOS_SEED)
   const [ativoSelecionado, setAtivoSelecionado] = useState(MB_ATIVOS_SEED[0])
+  const [tfCatalog, setTfCatalog] = useState<TfMeta[] | null>(null)
   const [operacaoAtiva, setOperacaoAtiva] = useState<Operacao | null>(null)
   const [precoAtual, setPrecoAtual] = useState(412850)
   const [busca, setBusca] = useState('')
@@ -218,9 +248,15 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
   const [now, setNow] = useState(new Date())
   const [carregandoAnalise, setCarregandoAnalise] = useState(false)
   const [abaEsquerda, setAbaEsquerda] = useState<'operacao' | 'ativos'>('operacao')
-  const [timeframe, setTimeframe] = useState<Timeframe>('H1')
+  const [timeframe, setTimeframe] = useState<string>('H1')
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
   const [carregandoOport, setCarregandoOport] = useState(false)
+  /** Estado da mesa na API (paper/live, broker, copy trade automático). */
+  const [mesaExecContext, setMesaExecContext] = useState<{
+    mode: string
+    brokerReady: boolean
+    copyTradeEnabled: boolean
+  } | null>(null)
   const operacaoInicioRef = useRef<Date>(new Date())
 
   // Relógio
@@ -279,13 +315,51 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
       .catch(() => { /* mantém seed */ })
   }, [])
 
+  // Catálogo de timeframes (motor + TV) — espelha GET /api/meta/chart-timeframes
+  useEffect(() => {
+    fetch(`${API_BASE}/api/meta/chart-timeframes`, { signal: AbortSignal.timeout(5000) })
+      .then(r => (r.ok ? r.json() : null))
+      .then((j: { success?: boolean; items?: TfMeta[] } | null) => {
+        if (j?.success && Array.isArray(j.items) && j.items.length > 0) {
+          setTfCatalog(j.items as TfMeta[])
+        }
+      })
+      .catch(() => { /* mantém fallback local */ })
+  }, [])
+
+  // Estado da mesa / broker (consistência com ordens manuais e automáticas)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/desk/status`, { signal: AbortSignal.timeout(8000) })
+        if (!r.ok || cancelled) return
+        const j = await r.json()
+        const root = j.data ?? j
+        const desk = root.desk ?? {}
+        const ct = root.copy_trade ?? {}
+        setMesaExecContext({
+          mode: String(desk.mode ?? 'paper'),
+          brokerReady: Boolean(ct.broker_ready),
+          copyTradeEnabled: Boolean(ct.enabled),
+        })
+      } catch {
+        if (!cancelled) setMesaExecContext(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   // Análise do ativo selecionado
-  const buscarAnalise = useCallback(async (simbolo: string) => {
+  const buscarAnalise = useCallback(async (simbolo: string, tfLabel: string) => {
+    const row = resolveTfRow(tfCatalog, tfLabel)
     setCarregandoAnalise(true)
     try {
       const assetParam = simbolo.replace('-BRL', '') + 'BRL'
       const r = await fetch(`${API_BASE}/api/analyze/${assetParam}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
         signal: AbortSignal.timeout(10000),
       })
       if (!r.ok) throw new Error()
@@ -299,75 +373,115 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
         })))
       }
     } catch {
-      setAgentes(AGENTES_BASE.map(a => {
-        const s = Math.floor(50 + Math.random() * 40)
-        return { ...a, score: s, voto: s >= 75 ? 'COMPRA' : s >= 50 ? 'NEUTRO' : 'VENDA' }
-      }))
+      setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
     } finally {
       setCarregandoAnalise(false)
     }
-  }, [])
+  }, [tfCatalog])
 
   useEffect(() => {
-    buscarAnalise(ativoSelecionado.simbolo)
-    const id = setInterval(() => buscarAnalise(ativoSelecionado.simbolo), 60000)
+    buscarAnalise(ativoSelecionado.simbolo, timeframe)
+    const id = setInterval(() => buscarAnalise(ativoSelecionado.simbolo, timeframe), 60000)
     return () => clearInterval(id)
-  }, [ativoSelecionado.simbolo, buscarAnalise])
+  }, [ativoSelecionado.simbolo, timeframe, buscarAnalise])
 
-  // ── Ranking de oportunidades por timeframe ────────────────────────────────
-  // Roda em background sem re-render no gráfico ou na operação ativa
-  const buscarOportunidades = useCallback(async (tf: Timeframe) => {
+  // ── Ranking: taxa de acerto histórica (quando existir) + score ao vivo; prioridade = acerto depois score
+  const buscarOportunidades = useCallback(async (tfLabel: string) => {
+    const row = resolveTfRow(tfCatalog, tfLabel)
     setCarregandoOport(true)
     const candidatos = MB_ATIVOS_SEED.slice(0, 10)
+    const hitMap = new Map<string, { hit: number; trades: number; tier: string }>()
+    try {
+      const hr = await fetch(
+        `${API_BASE}/api/performance/asset-hit-ranking?timeframe=${encodeURIComponent(row.canonical)}&window_days=90&min_trades=1`,
+        { signal: AbortSignal.timeout(6000) }
+      )
+      if (hr.ok) {
+        const hj = await hr.json()
+        const items = hj.data?.items ?? []
+        for (const it of items as { asset?: string; hit_rate_pct?: number; trades?: number; sample_tier?: string }[]) {
+          if (!it.asset) continue
+          hitMap.set(compactAssetKey(`${it.asset}`), {
+            hit: Number(it.hit_rate_pct) || 0,
+            trades: Number(it.trades) || 0,
+            tier: String(it.sample_tier ?? ''),
+          })
+        }
+      }
+    } catch { /* ranking opcional */ }
+
     try {
       const resultados = await Promise.allSettled(
         candidatos.map(a =>
           fetch(`${API_BASE}/api/analyze/${a.simbolo.replace('-BRL', '') + 'BRL'}`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
             signal: AbortSignal.timeout(8000),
           }).then(r => r.ok ? r.json() : null)
         )
       )
       const ranking: Oportunidade[] = resultados
         .map((r, i) => {
-          if (r.status !== 'fulfilled' || !r.value) {
-            // Fallback simulado quando API offline
-            const s = Math.floor(45 + Math.random() * 50)
-            return {
-              simbolo: candidatos[i].simbolo,
-              nome: candidatos[i].nome,
-              score: s,
-              direcao: (s >= 70 ? 'COMPRA' : s >= 50 ? 'NEUTRO' : 'VENDA') as Oportunidade['direcao'],
-            }
-          }
-          const d = r.value.data ?? r.value
-          const s: number = d.score ?? Math.floor(45 + Math.random() * 50)
-          return {
+          const base = {
             simbolo: candidatos[i].simbolo,
             nome: candidatos[i].nome,
+            score: null as number | null,
+            direcao: 'NEUTRO' as const,
+            taxaAcerto: null as number | null,
+            tradesHistorico: null as number | null,
+            amostraTier: null as string | null,
+            classificacao: null as string | null,
+          }
+          const hk = hitMap.get(compactAssetKey(candidatos[i].simbolo))
+          if (hk && hk.trades > 0) {
+            base.taxaAcerto = hk.hit
+            base.tradesHistorico = hk.trades
+            base.amostraTier = hk.tier || null
+          }
+          if (r.status !== 'fulfilled' || !r.value) {
+            return base
+          }
+          const d = r.value.data ?? r.value
+          const rawScore = d.score
+          const s: number | null = typeof rawScore === 'number' && Number.isFinite(rawScore) ? rawScore : null
+          const cls = typeof d.classification === 'string' ? d.classification : null
+          return {
+            ...base,
             score: s,
-            direcao: (s >= 70 ? 'COMPRA' : s >= 50 ? 'NEUTRO' : 'VENDA') as Oportunidade['direcao'],
+            direcao: (s != null && s >= 70 ? 'COMPRA' : s != null && s >= 50 ? 'NEUTRO' : 'VENDA') as Oportunidade['direcao'],
+            classificacao: cls,
           }
         })
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => {
+          const decisive = (t: number | null) => (t != null && t >= 3 ? 1 : 0)
+          const pa = decisive(a.tradesHistorico) ? (a.taxaAcerto ?? -1) : -1
+          const pb = decisive(b.tradesHistorico) ? (b.taxaAcerto ?? -1) : -1
+          if (pb !== pa) return pb - pa
+          const sa = a.score ?? -1
+          const sb = b.score ?? -1
+          return sb - sa
+        })
 
       setOportunidades(ranking)
 
-      // ⚡ Sinal antecipado — avisa ANTES de iniciar a operação
       const melhor = ranking[0]
-      if (melhor && melhor.score >= 82 && melhor.direcao === 'COMPRA') {
+      if (melhor && melhor.score != null && melhor.score >= 82 && melhor.direcao === 'COMPRA') {
+        const ac =
+          melhor.taxaAcerto != null && (melhor.tradesHistorico ?? 0) >= 3
+            ? ` · Acerto ${melhor.taxaAcerto}% (${melhor.tradesHistorico} ops)`
+            : ''
         mostrarToast(
-          `⚡ Sinal iminente: ${melhor.nome} · COMPRA · Score ${melhor.score} · ${tf}`,
+          `⚡ Oportunidade: ${melhor.nome} · COMPRA · Score ${melhor.score} · ${tfLabel}${ac}`,
           '#f59e0b'
         )
       }
     } catch { /* silencioso */ }
     finally { setCarregandoOport(false) }
-  }, [])
+  }, [tfCatalog])
 
   useEffect(() => {
     buscarOportunidades(timeframe)
-    // Atualiza a cada 5 minutos no background
     const id = setInterval(() => buscarOportunidades(timeframe), 5 * 60 * 1000)
     return () => clearInterval(id)
   }, [timeframe, buscarOportunidades])
@@ -378,21 +492,65 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
     const tipo = modalOrdem
     setModalOrdem(null)
     setAceiteRisco(false)
+    const tfRowOrdem = resolveTfRow(tfCatalog, timeframe)
     try {
-      await fetch(`${API_BASE}/api/desk/execute`, {
+      const r = await fetch(`${API_BASE}/api/desk/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          asset: ativoSelecionado.simbolo.replace('-', ''),
+          asset: compactAssetKey(ativoSelecionado.simbolo),
           side: tipo === 'COMPRA' ? 'BUY' : 'SELL',
           risk_percent: riscoPorc,
           source: 'plataforma-web',
+          chart_timeframe: tfRowOrdem.canonical,
+          auto_mode_context: modoAutomatico,
         }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(20000),
       })
-      mostrarToast(`Ordem de ${tipo} registrada - modo paper`, '#22c55e')
+      let j: Record<string, unknown> = {}
+      try {
+        j = (await r.json()) as Record<string, unknown>
+      } catch { /* corpo vazio */ }
+      if (!r.ok) {
+        const det = j.detail
+        const msg =
+          typeof det === 'string'
+            ? det
+            : Array.isArray(det)
+              ? (det as { msg?: string }[]).map(x => x.msg).filter(Boolean).join('; ')
+              : `HTTP ${r.status}`
+        mostrarToast(`Ordem recusada: ${msg}`, '#ef4444')
+        return
+      }
+      const data = (j.data ?? j) as {
+        message?: string
+        action?: string
+        mode?: string
+      }
+      const msg =
+        typeof data.message === 'string'
+          ? data.message
+          : data.action === 'paper_simulated'
+            ? 'Paper: ordem simulada na mesa (sem broker).'
+            : 'Ordem processada.'
+      const okReal = data.action === 'executed'
+      mostrarToast(msg, okReal ? '#22c55e' : '#38bdf8')
+      try {
+        const st = await fetch(`${API_BASE}/api/desk/status`, { signal: AbortSignal.timeout(6000) })
+        if (st.ok) {
+          const sj = await st.json()
+          const root = sj.data ?? sj
+          const desk = root.desk ?? {}
+          const ct = root.copy_trade ?? {}
+          setMesaExecContext({
+            mode: String(desk.mode ?? 'paper'),
+            brokerReady: Boolean(ct.broker_ready),
+            copyTradeEnabled: Boolean(ct.enabled),
+          })
+        }
+      } catch { /* opcional */ }
     } catch {
-      mostrarToast('API offline - ordem registrada localmente (paper)', '#f59e0b')
+      mostrarToast('API offline ou timeout — confirme se o ai-sentinel está em ' + API_BASE, '#f59e0b')
     }
   }
 
@@ -431,7 +589,8 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
   const corDirecao = (d: string) =>
     d === 'COMPRA' ? '#22c55e' : d === 'VENDA' ? '#ef4444' : '#f59e0b'
 
-  // ─── JSX ────────────────────────────────────────────────────────────────────
+  const tfRow = resolveTfRow(tfCatalog, timeframe)
+  const tfRowsUi = tfCatalog ?? FALLBACK_TF_CATALOG
   return (
     <div className={styles.plataforma}>
 
@@ -442,6 +601,18 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
           <span className={styles.topBarTitle}>Mesa Operacional</span>
           <span className={styles.topBarSep}>|</span>
           <span className={styles.topBarUser}>{userEmail}</span>
+          {mesaExecContext && (
+            <>
+              <span className={styles.topBarSep}>|</span>
+              <span className={styles.topBarMeta} title="UNI_IA_MODE na API; ordem real só em live com broker pronto. Automático exige COPY_TRADE_ENABLED e scanner.">
+                Mesa {mesaExecContext.mode.toUpperCase()}
+                {' · '}
+                Broker {mesaExecContext.brokerReady ? 'pronto' : 'incompleto'}
+                {' · '}
+                Auto {mesaExecContext.copyTradeEnabled ? 'on' : 'off'}
+              </span>
+            </>
+          )}
         </div>
         <div className={styles.topBarCenter}>
           {operacaoAtiva && (
@@ -686,77 +857,78 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
           <div className={styles.graficoHeader}>
             <span className={styles.graficoTitulo}>{ativoSelecionado.nome} / BRL</span>
 
-            {/* Seletor de timeframe */}
-            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-              {TIMEFRAMES.map(tf => (
-                <button key={tf}
-                  onClick={() => setTimeframe(tf)}
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: 4,
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    transition: 'all 0.15s',
-                    background: timeframe === tf ? '#f59e0b' : 'rgba(255,255,255,0.07)',
-                    color: timeframe === tf ? '#0a0a0a' : '#888',
-                  }}>
-                  {tf}
+            <div className={styles.tfRail} role="tablist" aria-label="Timeframe do grafico">
+              {tfRowsUi.map(tf => (
+                <button
+                  key={tf.label}
+                  type="button"
+                  role="tab"
+                  aria-selected={timeframe === tf.label}
+                  className={`${styles.tfBtn} ${timeframe === tf.label ? styles.tfBtnActive : ''}`}
+                  onClick={() => setTimeframe(tf.label)}
+                >
+                  {tf.label}
                 </button>
               ))}
             </div>
 
-            <span className={styles.graficoSub} style={{ fontSize: '0.68rem', color: '#4a4035', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {TF_ESTRATEGIA[timeframe]}
-            </span>
+            <div className={styles.tfHintBlock}>
+              <span className={styles.graficoSub}>{tfRow.strategy_hint}</span>
+              {tfRow.strategy_family ? (
+                <span className={styles.graficoFamilia} title={tfRow.strategy_family_note ?? undefined}>
+                  Motor: {tfRow.strategy_family}
+                </span>
+              ) : null}
+              {tfRow.agent_alignment ? (
+                <span className={styles.graficoAgentAlign}>{tfRow.agent_alignment}</span>
+              ) : null}
+            </div>
           </div>
 
-          {/* Barra de oportunidades — atualiza sem piscar o gráfico */}
           {oportunidades.length > 0 && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '5px 10px',
-              overflowX: 'auto',
-              background: 'rgba(0,0,0,0.35)',
-              borderBottom: '1px solid rgba(255,255,255,0.04)',
-              scrollbarWidth: 'none',
-            }}>
-              <span style={{ fontSize: '0.62rem', color: '#4a4035', flexShrink: 0, marginRight: 4 }}>
-                {carregandoOport ? 'atualizando...' : `Top ${timeframe}:`}
+            <div className={styles.oppStrip}>
+              <span className={styles.oppStripLabel}>
+                {carregandoOport ? 'Atualizando' : 'Prioridade'}
               </span>
-              {oportunidades.slice(0, 8).map(op => (
-                <button key={op.simbolo}
+              <span className={styles.graficoAgentAlign} style={{ flexShrink: 0, marginRight: 6 }}>
+                {timeframe} · acerto→score
+              </span>
+              {oportunidades.slice(0, 10).map(op => (
+                <button
+                  key={op.simbolo}
+                  type="button"
+                  className={`${styles.oppChip} ${op.classificacao === 'OPORTUNIDADE' ? styles.oppChipOpp : ''}`}
+                  style={{
+                    borderColor: `${corDirecao(op.direcao)}44`,
+                    color: corDirecao(op.direcao),
+                    background: `${corDirecao(op.direcao)}14`,
+                  }}
                   onClick={() => {
                     const a = ativos.find(x => x.simbolo === op.simbolo)
                     if (a) { setAtivoSelecionado(a); setAbaEsquerda('operacao') }
                   }}
-                  style={{
-                    flexShrink: 0,
-                    padding: '2px 9px',
-                    borderRadius: 3,
-                    border: `1px solid ${corDirecao(op.direcao)}33`,
-                    cursor: 'pointer',
-                    background: `${corDirecao(op.direcao)}12`,
-                    color: corDirecao(op.direcao),
-                    fontSize: '0.67rem',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                  }}>
-                  {op.nome.split(' ')[0]} · {op.score}
+                >
+                  <span style={{ opacity: 0.96 }}>
+                    {op.nome.split(' ')[0]}
+                    {op.classificacao === 'OPORTUNIDADE' ? ' ★' : ''}
+                    {' · '}
+                    {op.score == null ? '—' : op.score}
+                    {op.taxaAcerto != null && (op.tradesHistorico ?? 0) >= 1
+                      ? ` · ${op.taxaAcerto}%/${op.tradesHistorico}`
+                      : ''}
+                  </span>
                 </button>
               ))}
             </div>
           )}
 
-          {/* Gráfico TradingView */}
           <div className={styles.graficoBox}>
-            <TradingViewChart
-              simboloTV={ativoSelecionado.tv}
-              timeframe={timeframe}
-            />
+            <div className={styles.chartFrame}>
+              <TradingViewChart
+                simboloTV={ativoSelecionado.tv}
+                interval={tfRow.tv}
+              />
+            </div>
           </div>
         </main>
 
@@ -815,7 +987,8 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                 ['Ativo', `${ativoSelecionado.nome} (${ativoSelecionado.simbolo})`],
                 ['Direcao', modalOrdem],
                 ['Timeframe', timeframe],
-                ['Estrategia', TF_ESTRATEGIA[timeframe].split(' — ')[0]],
+                ['Estrategia (TF)', tfRow.strategy_hint.slice(0, 52) + (tfRow.strategy_hint.length > 52 ? '…' : '')],
+                ['Agentes (alinhamento)', (tfRow.agent_alignment ?? '—').slice(0, 72) + ((tfRow.agent_alignment?.length ?? 0) > 72 ? '…' : '')],
                 ['Alocacao de risco', `${riscoPorc}%`],
                 ['Valor em risco', `R$ ${((capitalTotal * riscoPorc) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
                 ['Score do sistema', `${scoreFinal ?? 'N/A'}/100`],

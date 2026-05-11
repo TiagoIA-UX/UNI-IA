@@ -37,7 +37,7 @@ class ArgusAgent:
     ):
         self.feature_store = feature_store or FeatureStore()
         self.outcome_tracker = outcome_tracker or OutcomeTracker()
-        self.llm = GroqClient()
+        self._llm: Optional[GroqClient] = None
         self._lock = threading.Lock()
         self._active_positions: Dict[str, Dict[str, Any]] = {}
 
@@ -51,6 +51,12 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     "urgency": "low" ou "medium" ou "high" ou "critical",
     "reason": "Justificativa objetiva."
 }"""
+
+    @property
+    def llm(self) -> GroqClient:
+        if self._llm is None:
+            self._llm = GroqClient()
+        return self._llm
 
     # ------------------------------------------------------------------
     # Position registry

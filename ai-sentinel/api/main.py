@@ -1,9 +1,9 @@
 from pathlib import Path
 import os as _os
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Body, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 import uvicorn
@@ -17,6 +17,8 @@ from api.telegram_control import TelegramControlService
 from api.copy_trade import CopyTradeService
 from api.desk import PrivateDesk
 from api.signal_scanner import SignalScanner
+from api.security import require_admin_token
+from core.chart_timeframes import normalize_chart_timeframe, public_timeframes_catalog
 
 # Configuração de Logging para Monitoramento Proativo
 logging.basicConfig(
@@ -53,7 +55,7 @@ app.add_middleware(
     allow_origins=_safe_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-UNI-IA-ADMIN-TOKEN"],
 )
 
 # --- Inicialização de Singletons ---
@@ -70,6 +72,16 @@ except Exception as init_err:
     logger.error(f"Falha crítica na inicialização dos serviços: {init_err}")
     raise init_err
 
+
+class AnalyzeRequestBody(BaseModel):
+    """Corpo opcional do POST /api/analyze — alinha motor ao timeframe do grafico na UI."""
+    timeframe: Optional[str] = Field(
+        None,
+        description="Intervalo canonico (ex: 1m, 5m, 1h, 1wk). Lista em GET /api/meta/chart-timeframes",
+    )
+    tf_label: Optional[str] = Field(None, description="Label opcional da UI (ex: M1, H4)")
+
+
 # --- Modelos de Dados (Schemas) ---
 class OperationRequest(BaseModel):
     symbol: str = Field(..., description="Símbolo do par de negociação (ex: BTCBRL)")
@@ -83,9 +95,35 @@ class OperationRequest(BaseModel):
             raise ValueError('O lado deve ser BUY ou SELL')
         return v.upper()
 
+
+class DeskExecuteBody(BaseModel):
+    """Corpo de POST /api/desk/execute — ordem manual pela plataforma ou integração."""
+    asset: str = Field(..., description="Par ou base, ex: BTCBRL, BTC-BRL, BTCUSDT")
+    side: str = Field(..., description="BUY ou SELL (COMPRA/VENDA aceitos)")
+    risk_percent: float = Field(1.0, gt=0, le=100, description="Metadado de risco (auditoria)")
+    source: str = Field("plataforma-web", description="Origem do disparo")
+    quantity: Optional[str] = Field(None, description="Quantidade da ordem; default MB_DEFAULT_QTY / BYBIT_DEFAULT_QTY")
+    chart_timeframe: Optional[str] = Field(None, description="Timeframe canónico da UI (GET /api/meta/chart-timeframes)")
+    auto_mode_context: Optional[bool] = Field(None, description="Se o utilizador tinha modo automático ligado na UI")
+
+    @validator("asset")
+    def strip_asset(cls, v):
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("asset obrigatorio")
+        return s
+
+    @validator("side")
+    def normalize_side(cls, v):
+        u = (v or "").strip().upper()
+        if u not in ("BUY", "SELL", "COMPRA", "VENDA"):
+            raise ValueError("side deve ser BUY, SELL, COMPRA ou VENDA")
+        return u
+
+
 # --- Pipeline de Análise Original ---
-def analyze_asset_pipeline(asset: str) -> Dict[str, Any]:
-    alert = analysis_service.analyze(asset)
+def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) -> Dict[str, Any]:
+    alert = analysis_service.analyze(asset, chart_timeframe=chart_timeframe)
     desk_preview = private_desk.preview_action(alert)
 
     try:
@@ -95,7 +133,11 @@ def analyze_asset_pipeline(asset: str) -> Dict[str, Any]:
             asset=alert.asset,
             classification=alert.classification,
             score=float(alert.score),
-            details={"strategy": alert.strategy.dict() if alert.strategy else None, "sources": alert.sources},
+            details={
+                "strategy": alert.strategy.dict() if alert.strategy else None,
+                "sources": alert.sources,
+                "chart_timeframe": getattr(alert, "chart_timeframe", None),
+            },
         )
     except Exception as audit_error:
         logger.warning(f"Erro ao registrar auditoria: {audit_error}")
@@ -108,6 +150,10 @@ def analyze_asset_pipeline(asset: str) -> Dict[str, Any]:
         telegram_result = {"success": False, "dispatched": False, "error": str(telegram_error)}
 
     desk_result = private_desk.handle_alert(alert)
+    try:
+        analysis_service.register_argus_after_desk_pipeline(alert, desk_result)
+    except Exception as reg_err:
+        logger.warning("register_argus_after_desk_pipeline: %s", reg_err)
     return {
         "success": True,
         "data": alert.dict(),
@@ -150,12 +196,38 @@ def signals_status():
 # --- Endpoints de Gestão de Sinais ---
 
 @app.post("/api/analyze/{asset}", tags=["Sinais"])
-def analyze_asset(asset: str):
+def analyze_asset(asset: str, body: Optional[AnalyzeRequestBody] = Body(default=None)):
+    chart_tf = normalize_chart_timeframe(body.timeframe) if body else None
     try:
-        return analyze_asset_pipeline(asset)
+        return analyze_asset_pipeline(asset, chart_timeframe=chart_tf)
     except Exception as e:
         logger.error(f"Erro na análise do ativo {asset}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/meta/chart-timeframes", tags=["Metadados"])
+def meta_chart_timeframes():
+    """Timeframes suportados pelo motor, alinhados ao embed TradingView."""
+    return {"success": True, "items": public_timeframes_catalog()}
+
+
+@app.get("/api/performance/asset-hit-ranking", tags=["Performance"])
+def performance_asset_hit_ranking(
+    timeframe: str,
+    window_days: int = 90,
+    min_trades: int = 1,
+):
+    """Ranking por taxa de acerto (wins / trades decisivos) por ativo no timeframe."""
+    tf = normalize_chart_timeframe(timeframe)
+    if not tf:
+        raise HTTPException(status_code=400, detail="timeframe_invalido")
+    data = analysis_service.outcome_tracker.asset_hit_ranking(
+        timeframe=tf,
+        window_days=window_days,
+        min_trades=min_trades,
+    )
+    return {"success": True, "data": data}
+
 
 @app.get("/api/copytrade/status", tags=["Broker"])
 def copytrade_status():
@@ -192,6 +264,161 @@ def desk_approve(request_id: str):
 @app.post("/api/desk/reject/{request_id}", tags=["Broker"])
 def desk_reject(request_id: str):
     return {"success": True, "data": private_desk.reject(request_id)}
+
+
+@app.post("/api/desk/execute", tags=["Broker"])
+def desk_execute(body: DeskExecuteBody):
+    """Executa ordem manual (paper ou live no broker conforme UNI_IA_MODE)."""
+    try:
+        chart_tf = (
+            normalize_chart_timeframe(body.chart_timeframe)
+            if body.chart_timeframe
+            else None
+        )
+        data = private_desk.execute_manual_order(
+            asset=body.asset,
+            side=body.side,
+            risk_percent=body.risk_percent,
+            source=body.source,
+            quantity=body.quantity,
+            chart_timeframe=chart_tf,
+            auto_mode_context=body.auto_mode_context,
+        )
+        if data.get("action") == "executed" and data.get("execution"):
+            br = (data["execution"].get("broker_response") or {})
+            price = br.get("price_brl")
+            if isinstance(price, (int, float)) and float(price) > 0:
+                try:
+                    analysis_service.register_argus_after_manual_execution(
+                        asset=str(data.get("symbol") or body.asset),
+                        side=body.side,
+                        entry_price=float(price),
+                        chart_timeframe=chart_tf,
+                        strategy_mode="manual_desk",
+                    )
+                except Exception as reg_err:
+                    logger.warning("register_argus_after_manual_execution: %s", reg_err)
+        return {"success": True, "data": data}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("desk_execute")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def argus_register(body: Dict[str, Any], _=None):
+    """Registo de posicao ARGUS (testes / integracoes internas)."""
+    data = body or {}
+    missing = [k for k in ("signal_id", "asset", "direction", "entry_price") if data.get(k) is None]
+    if missing:
+        raise ValueError(f"campos obrigatorios ausentes: {', '.join(missing)}")
+    out = analysis_service.argus.register_position(
+        signal_id=str(data["signal_id"]),
+        request_id=data.get("request_id"),
+        asset=str(data["asset"]),
+        direction=str(data["direction"]).lower(),
+        entry_price=float(data["entry_price"]),
+        timeframe=data.get("timeframe"),
+        strategy=data.get("strategy"),
+    )
+    return {"success": True, "data": out}
+
+
+def argus_close(body: Dict[str, Any], _=None):
+    data = body or {}
+    if not data.get("signal_id"):
+        raise ValueError("signal_id obrigatorio")
+    out = analysis_service.argus.close_position(
+        signal_id=str(data["signal_id"]),
+        exit_price=float(data["exit_price"]),
+        result=str(data["result"]),
+    )
+    return {"success": True, "data": out}
+
+
+def outcomes_record(body: Dict[str, Any], _=None):
+    """Grava outcome com correlacao a posicao ARGUS ativa (anti-orfaos)."""
+    data = body or {}
+    sid = data.get("signal_id")
+    if not sid:
+        raise ValueError("signal_id obrigatorio")
+    pos = analysis_service.argus.get_active_position(str(sid))
+    if not pos:
+        raise RuntimeError(
+            "Outcome rejeitado: falta correlacao verificavel com posicao ARGUS ativa."
+        )
+    for k in ("exit_price", "pnl_percent", "result"):
+        if data.get(k) is None:
+            raise ValueError(f"{k} obrigatorio")
+    res = analysis_service.outcome_tracker.record_outcome(
+        signal_id=str(sid),
+        request_id=data.get("request_id") or pos.get("request_id"),
+        asset=str(data.get("asset") or pos.get("asset", "")).upper(),
+        direction=str(data.get("direction") or pos.get("direction", "long")).lower(),
+        entry_price=float(data.get("entry_price", pos["entry_price"])),
+        exit_price=float(data["exit_price"]),
+        pnl_percent=float(data["pnl_percent"]),
+        result=str(data["result"]),
+        timeframe=data.get("timeframe") or pos.get("timeframe"),
+        strategy=data.get("strategy") or pos.get("strategy"),
+    )
+    return {"success": True, "data": res}
+
+
+@app.post("/api/admin/argus/register", tags=["Admin"])
+def http_argus_register(
+    body: Dict[str, Any] = Body(...),
+    _auth: None = Depends(require_admin_token),
+):
+    """Regista posicao ARGUS (header `X-UNI-IA-ADMIN-TOKEN` = `UNI_IA_ADMIN_TOKEN`)."""
+    try:
+        return argus_register(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("http_argus_register")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/argus/close", tags=["Admin"])
+def http_argus_close(
+    body: Dict[str, Any] = Body(...),
+    _auth: None = Depends(require_admin_token),
+):
+    """Fecha posicao ARGUS e grava outcome via fluxo do agente."""
+    try:
+        return argus_close(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("http_argus_close")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/outcomes/record", tags=["Admin"])
+def http_outcomes_record(
+    body: Dict[str, Any] = Body(...),
+    _auth: None = Depends(require_admin_token),
+):
+    """Grava outcome correlacionado com posicao ARGUS ativa (anti-orfaos)."""
+    try:
+        return outcomes_record(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("http_outcomes_record")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/copytrade/execute/{asset}", tags=["Broker"])
 def copytrade_execute(asset: str):

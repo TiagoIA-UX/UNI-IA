@@ -58,3 +58,5 @@ class OpportunityAlert(BaseModel):
     position_reversal_alert: Optional[str] = None # Alerta de proteção de posições abertas
     strategy: Optional[StrategyDecision] = None
     governance: Optional[SentinelGovernanceDecision] = None
+    # Timeframe do grafico solicitado pela UI (ex: 1m, 1h); alimenta ATLAS/AEGIS quando informado.
+    chart_timeframe: Optional[str] = None

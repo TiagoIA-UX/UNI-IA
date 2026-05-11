@@ -500,3 +500,52 @@ class CopyTradeService:
             "payload":         payload,
             "broker_response": broker_response,
         }
+
+    def execute_manual_order(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        quantity: Optional[str] = None,
+        risk_percent: Optional[float] = None,
+        meta: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Envia ordem ao broker sem exigir COPY_TRADE_ENABLED (uso pela mesa / UI manual)."""
+        if not self.adapter.is_ready():
+            raise RuntimeError(
+                f"Broker '{self.provider}' nao configurado. Faltando: {self.adapter.missing_config()}"
+            )
+        side_raw = (side or "").strip().upper()
+        if side_raw in ("COMPRA", "BUY"):
+            side_u = "BUY"
+        elif side_raw in ("VENDA", "SELL"):
+            side_u = "SELL"
+        else:
+            raise RuntimeError("Lado invalido: use BUY ou SELL.")
+
+        qty = quantity
+        if not qty:
+            dq = getattr(self.adapter, "default_qty", None)
+            if dq is None:
+                dq = (
+                    os.getenv("MB_DEFAULT_QTY", "0.0001")
+                    if self.provider == "mercadobitcoin"
+                    else os.getenv("BYBIT_DEFAULT_QTY", "0.001")
+                )
+            qty = str(dq)
+
+        payload: Dict[str, Any] = {
+            "symbol": symbol,
+            "side":   side_u,
+            "qty":    qty,
+            "meta":   meta or {},
+        }
+        if risk_percent is not None:
+            payload["risk_percent"] = risk_percent
+
+        broker_response = self.adapter.place_order(payload)
+        return {
+            "success":         True,
+            "payload":         payload,
+            "broker_response": broker_response,
+        }

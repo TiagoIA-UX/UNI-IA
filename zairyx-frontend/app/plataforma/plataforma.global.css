@@ -38,6 +38,10 @@
   --radius:      8px;
   --radius-lg:   14px;
   --shadow:      0 4px 24px rgba(0,0,0,0.5);
+  --shadow-lg:   0 12px 40px rgba(0,0,0,0.55);
+  --premium-line: linear-gradient(90deg, rgba(201,168,76,0.35), rgba(34,197,94,0.2), rgba(45,212,191,0.15));
+  --glass:       rgba(13,17,23,0.72);
+  --ring-focus:  0 0 0 1px rgba(201,168,76,0.45), 0 0 20px rgba(201,168,76,0.12);
 }
 
 /* ── Scrollbar global ─────────────────────────────────────────── */

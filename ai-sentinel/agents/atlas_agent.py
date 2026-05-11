@@ -24,6 +24,7 @@ import yfinance as yf
 import numpy as np
 
 from agents.market_utils import resolve_market_ticker
+from core.chart_timeframes import yf_interval_period
 from core.feature_store import FeatureStore
 from core.schemas import AgentSignal
 from llm.groq_client import GroqClient
@@ -40,6 +41,10 @@ def _safe(val: Any, decimals: int = 6) -> Any:
     if isinstance(val, (int, np.integer)):
         return int(val)
     return val
+
+
+# Timeframes onde a estrutura HH/HL/LH/LL e calculada no proprio intervalo do grafico (topos/fundos locais).
+_USER_CHART_SWING_STRUCTURE_TFS = frozenset({"1m", "2m", "5m", "15m", "30m"})
 
 
 class AtlasAgent:
@@ -71,7 +76,7 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     # Feature computation (puro numpy, zero LLM)
     # ------------------------------------------------------------------
 
-    def compute_features(self, asset: str) -> Dict[str, Any]:
+    def compute_features(self, asset: str, chart_timeframe: Optional[str] = None) -> Dict[str, Any]:
         """Computa vetor completo de features estruturais."""
         ticker_str = self._get_ticker(asset)
         ticker = yf.Ticker(ticker_str)
@@ -123,6 +128,21 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         else:
             features["atr_14_1d"] = None
             features["atr_14_1d_pct"] = None
+
+        # Gap sessao D1: abertura vs fecho anterior (sincrono; PTAX async fica em core/gap_filter)
+        features["daily_session_gap_pct"] = None
+        features["daily_gap_atr_ratio"] = None
+        try:
+            if "Open" in hist_1d.columns and len(close_1d) >= 2:
+                o_last = float(hist_1d["Open"].values[-1])
+                prev_c = float(close_1d[-2])
+                if prev_c != 0:
+                    features["daily_session_gap_pct"] = _safe((o_last - prev_c) / prev_c * 100.0, 4)
+                atr14 = features.get("atr_14_1d")
+                if atr14 is not None and float(atr14) > 0:
+                    features["daily_gap_atr_ratio"] = _safe(abs(o_last - prev_c) / float(atr14), 4)
+        except Exception:
+            pass
 
         # --- ATR Regime (low / normal / high / extreme) ---
         if features["atr_14_1d_pct"] is not None:
@@ -284,7 +304,80 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         else:
             features["divergence_rsi_1d"] = None
 
+        if chart_timeframe:
+            self._inject_user_chart_features(ticker, features, chart_timeframe.strip().lower())
+
         return features
+
+    def _inject_user_chart_features(self, ticker: Any, features: Dict[str, Any], chart_tf: str) -> None:
+        """Enriquece o vetor com leitura alinhada ao timeframe do grafico (UI / TradingView)."""
+        features["user_chart_tf"] = chart_tf
+
+        if chart_tf == "1d":
+            features["user_chart_tf_data_ok"] = True
+            if features.get("rsi_14_1d") is not None:
+                features["user_chart_tf_rsi14"] = features["rsi_14_1d"]
+            if features.get("price_last") is not None:
+                features["user_chart_tf_last_close"] = features["price_last"]
+            if features.get("daily_session_gap_pct") is not None:
+                features["user_chart_tf_daily_session_gap_pct"] = features["daily_session_gap_pct"]
+            if features.get("daily_gap_atr_ratio") is not None:
+                features["user_chart_tf_daily_gap_atr_ratio"] = features["daily_gap_atr_ratio"]
+            return
+
+        pair = yf_interval_period(chart_tf)
+        if not pair:
+            features["user_chart_tf_data_ok"] = False
+            return
+
+        interval, period = pair
+        try:
+            hist = ticker.history(period=period, interval=interval)
+        except Exception:
+            hist = None  # type: ignore[assignment]
+
+        min_bars = 10 if chart_tf in ("1wk", "1mo", "3mo", "5d") else 15
+        if hist is None or hist.empty or len(hist) < min_bars:
+            features["user_chart_tf_data_ok"] = False
+            return
+
+        features["user_chart_tf_data_ok"] = True
+        close = hist["Close"].values.astype(float)
+        vol = hist["Volume"].values.astype(float) if "Volume" in hist.columns else None
+
+        features["user_chart_tf_last_close"] = _safe(float(close[-1]))
+
+        if len(close) >= 2 and close[-2] != 0:
+            features["user_chart_tf_last_return_pct"] = _safe((close[-1] / close[-2] - 1.0) * 100.0, 4)
+
+        rsi_period = min(14, max(3, len(close) - 2))
+        if len(close) >= rsi_period + 1:
+            deltas = np.diff(close[-(rsi_period + 1) :])
+            gains = np.where(deltas > 0, deltas, 0.0)
+            losses = np.where(deltas < 0, -deltas, 0.0)
+            avg_gain = float(np.mean(gains))
+            avg_loss = float(np.mean(losses))
+            if avg_loss == 0:
+                rsi = 100.0
+            else:
+                rs = avg_gain / avg_loss
+                rsi = 100.0 - (100.0 / (1.0 + rs))
+            features["user_chart_tf_rsi14"] = _safe(rsi, 2)
+
+        if vol is not None and len(vol) >= 21 and float(np.mean(vol[-21:-1])) > 0:
+            features["user_chart_tf_volume_ratio"] = _safe(float(vol[-1]) / float(np.mean(vol[-21:-1])), 3)
+
+        if chart_tf in _USER_CHART_SWING_STRUCTURE_TFS:
+            try:
+                hi = hist["High"].values.astype(float)
+                lo = hist["Low"].values.astype(float)
+                if len(hi) >= 10:
+                    st = self._detect_market_structure(hi, lo)
+                    features["user_chart_tf_structure_pattern"] = st.get("pattern")
+                    features["user_chart_tf_structure_trend"] = st.get("trend")
+                    features["user_chart_tf_structure_bos"] = bool(st.get("bos"))
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Helpers
@@ -369,13 +462,18 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     # Analise completa
     # ------------------------------------------------------------------
 
-    def analyze(self, asset: str, signal_id: Optional[str] = None) -> AgentSignal:
+    def analyze(self, asset: str, signal_id: Optional[str] = None, chart_timeframe: Optional[str] = None) -> AgentSignal:
         """Computa features, persiste, interpreta via LLM."""
-        features = self.compute_features(asset)
+        features = self.compute_features(asset, chart_timeframe=chart_timeframe)
 
         # Montar prompt com features numericas
         feature_text = self._format_features(features)
         prompt = f"Vetor de features estruturais para {asset}:\n\n{feature_text}\n\nInterprete a estrutura e emita seu julgamento."
+        if chart_timeframe:
+            prompt += (
+                f"\n\nPrioridade: o operador esta com o grafico em **{chart_timeframe}**. "
+                "De peso extra as features prefixadas com user_chart_tf_ quando existirem."
+            )
 
         response = self.llm.generate_response(self.system_prompt, prompt)
         data = extract_json_object(response)
