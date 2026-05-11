@@ -168,6 +168,7 @@
 .colunaEsquerda {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   background: var(--bg-2);
   border-right: 1px solid var(--border);
   overflow: hidden;

@@ -24,6 +24,19 @@ interface Operacao {
   score: number; motivo: string
   resultado: { tipo: 'GANHO' | 'PERDA'; variacao: number } | null
 }
+/** Trecho de `data` em POST /api/analyze/{asset} (alerta consolidado). */
+interface AnalyzeAlertPayload {
+  asset?: string
+  score?: number
+  classification?: string
+  explanation?: string
+  strategy?: {
+    direction?: string
+    reasons?: string[]
+    operational_status?: string
+  } | null
+  governance?: { approved?: boolean } | null
+}
 interface Oportunidade {
   simbolo: string
   nome: string
@@ -154,9 +167,6 @@ function avaliarEntradaAtrasada(
       movimentoConsumidoPorc: 0,
     }
   }
-  if (!op.precoEntrada || !op.stopLoss || !op.alvo) {
-    return { podeEntrar: false, mensagem: 'Aguardando dados completos da operacao.', urgencia: 'atencao', movimentoConsumidoPorc: 0 }
-  }
   if (op.status === 'encerrada' || op.status === 'rejeitada') {
     return {
       podeEntrar: false,
@@ -164,6 +174,19 @@ function avaliarEntradaAtrasada(
       urgencia: 'perigo',
       movimentoConsumidoPorc: 100,
     }
+  }
+  if (!op.stopLoss || !op.alvo) {
+    return {
+      podeEntrar: false,
+      mensagem: op.precoEntrada
+        ? 'Preco de referencia registado; stop e alvo nao constam na resposta do motor. Defina na mesa antes de dimensionar posicao.'
+        : 'Aguardando dados completos da operacao (entrada, stop e alvo).',
+      urgencia: 'atencao',
+      movimentoConsumidoPorc: 0,
+    }
+  }
+  if (!op.precoEntrada) {
+    return { podeEntrar: false, mensagem: 'Aguardando preco de referencia da operacao.', urgencia: 'atencao', movimentoConsumidoPorc: 0 }
   }
   const movimentoTotal = Math.abs(op.alvo - op.precoEntrada)
   const movimentoAtual = op.direcao === 'COMPRA' ? precoAtual - op.precoEntrada : op.precoEntrada - precoAtual
@@ -287,6 +310,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     copyTradeEnabled: boolean
   } | null>(null)
   const operacaoInicioRef = useRef<Date>(new Date())
+  const precoAtualRef = useRef(precoAtual)
+  precoAtualRef.current = precoAtual
 
   // Relógio
   useEffect(() => {
@@ -439,8 +464,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         Array.isArray(data.agent_failures) ? data.agent_failures : []
       const integ = typeof data.integrity_score === 'number' ? data.integrity_score : null
 
-      // Detectar backend desatualizado (sem agent_scores ainda) e avisar.
-      if (!data.agent_scores) {
+      if (data.agent_scores) setAnaliseErro(null)
+      else {
         setAnaliseErro(
           'Backend desatualizado: nao retornou agent_scores. Reinicie o ai-sentinel (uvicorn) para pegar o commit mais recente.'
         )
@@ -473,6 +498,50 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       }))
       setAgentFailures(failures)
       setIntegrityScore(integ)
+
+      const alert = data.data as AnalyzeAlertPayload | undefined
+      if (alert && typeof alert === 'object') {
+        const strat = alert.strategy
+        const dirRaw = String(strat?.direction ?? '').toLowerCase()
+        const direcao: 'COMPRA' | 'VENDA' = dirRaw === 'short' ? 'VENDA' : 'COMPRA'
+        const cls = String(alert.classification ?? '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toUpperCase()
+        const gov = alert.governance
+        const blockedByGov = gov != null && gov.approved === false
+        let status: Operacao['status'] = 'monitorando'
+        if (blockedByGov || cls.includes('RISCO')) status = 'rejeitada'
+
+        const scoreNum =
+          typeof alert.score === 'number' && Number.isFinite(alert.score) ? alert.score : 0
+        const motivoParts: string[] = []
+        if (alert.explanation) motivoParts.push(String(alert.explanation))
+        if (strat?.reasons && strat.reasons.length > 0) {
+          motivoParts.push(strat.reasons.slice(0, 6).join(' · '))
+        }
+        if (dirRaw === 'flat' || !strat) {
+          motivoParts.push('Direcao da estrategia neutra (flat) ou indefinida.')
+        }
+        motivoParts.push('Stop e alvo nao constam na resposta da API; defina na mesa se for operar.')
+
+        const sinalEm = new Date()
+        setOperacaoAtiva(prev => {
+          if (!prev || prev.ativo !== simbolo) return prev
+          const px = precoAtualRef.current
+          const directional = dirRaw === 'long' || dirRaw === 'short'
+          return {
+            ...prev,
+            direcao,
+            status,
+            score: scoreNum,
+            motivo: motivoParts.filter(Boolean).join('\n\n'),
+            inicio: sinalEm,
+            precoEntrada: status === 'monitorando' && directional ? px : prev.precoEntrada,
+            precoAtual: px,
+          }
+        })
+      }
     } catch (err) {
       const aborted = err instanceof Error && /abort/i.test(String(err.message ?? err.name ?? ''))
       if (aborted && ctrl.signal.reason === 'superseded') {
@@ -802,7 +871,12 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                   </span>
                 </div>
                 <span className={styles.badgePulso}>
-                  <span className={styles.pontoPulso} /> Monitorando
+                  <span className={styles.pontoPulso} />
+                  {operacaoAtiva.status === 'rejeitada'
+                    ? 'Rejeitada'
+                    : operacaoAtiva.status === 'aguardando'
+                      ? 'Aguardando'
+                      : 'Monitorando'}
                 </span>
               </div>
 
@@ -950,15 +1024,35 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
               <div className={styles.botoesOrdem}>
                 <button
                   className={styles.btnComprar}
-                  disabled={operacaoAtiva.status === 'aguardando' || scoreFinal === null}
-                  title={scoreFinal === null ? 'Aguardando analise (AEGIS) para liberar ordem.' : 'Comprar agora'}
+                  disabled={
+                    operacaoAtiva.status === 'aguardando' ||
+                    operacaoAtiva.status === 'rejeitada' ||
+                    scoreFinal === null
+                  }
+                  title={
+                    operacaoAtiva.status === 'rejeitada'
+                      ? 'Sinal rejeitado pelo motor (Sentinel/governanca ou classificacao de risco).'
+                      : scoreFinal === null
+                        ? 'Aguardando analise (AEGIS) para liberar ordem.'
+                        : 'Comprar agora'
+                  }
                   onClick={() => { setModalOrdem('COMPRA'); setAceiteRisco(false) }}>
                   ▲ COMPRAR
                 </button>
                 <button
                   className={styles.btnVender}
-                  disabled={operacaoAtiva.status === 'aguardando' || scoreFinal === null}
-                  title={scoreFinal === null ? 'Aguardando analise (AEGIS) para liberar ordem.' : 'Vender agora'}
+                  disabled={
+                    operacaoAtiva.status === 'aguardando' ||
+                    operacaoAtiva.status === 'rejeitada' ||
+                    scoreFinal === null
+                  }
+                  title={
+                    operacaoAtiva.status === 'rejeitada'
+                      ? 'Sinal rejeitado pelo motor (Sentinel/governanca ou classificacao de risco).'
+                      : scoreFinal === null
+                        ? 'Aguardando analise (AEGIS) para liberar ordem.'
+                        : 'Vender agora'
+                  }
                   onClick={() => { setModalOrdem('VENDA'); setAceiteRisco(false) }}>
                   ▼ VENDER
                 </button>
