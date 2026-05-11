@@ -23,12 +23,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Boitatá IA Finanças Brasil',
   description:
-    'Onde o capital se multiplica e protege a vida animal da Amazônia. Inteligência artificial financeira com propósito ambiental.',
+    'Plataforma de inteligência artificial financeira para operações em criptoativos.',
   keywords:
-    'boitatá ia, finanças brasil, inteligência artificial, mercado bitcoin, proteção amazônia, fintech sustentável',
+    'boitatá ia, finanças brasil, inteligência artificial, mercado bitcoin, fintech',
   openGraph: {
     title: 'Boitatá IA Finanças Brasil',
-    description: 'Onde o capital se multiplica e protege a vida animal da Amazônia.',
+    description: 'Plataforma de inteligência artificial financeira para operações em criptoativos.',
     type: 'website',
     locale: 'pt_BR',
     siteName: 'Boitatá IA',
@@ -67,9 +67,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   Boitatá IA{' '}
                   <span className={styles.brandTitleSub}>Finanças Brasil</span>
                 </h1>
-                <p className={styles.brandTagline}>
-                  Onde o capital multiplica e protege a Amazônia
-                </p>
               </div>
             </a>
             <nav className={styles.nav}>
@@ -104,10 +101,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <main className={styles.main}>{children}</main>
         <footer className={styles.footer}>
           <p className={styles.footerBrand}>
-            Boitatá IA Finanças Brasil © 2026 — Fintech com propósito
-          </p>
-          <p className={styles.footerMission}>
-            🌿 10% do lucro líquido protege a vida animal da Amazônia
+            Boitatá IA Finanças Brasil © 2026
           </p>
           <p className={styles.footerNav}>
             <Suspense fallback={null}>

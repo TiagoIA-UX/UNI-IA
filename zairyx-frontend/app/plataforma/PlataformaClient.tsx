@@ -253,6 +253,12 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const [toast, setToast] = useState<{ msg: string; cor: string } | null>(null)
   const [now, setNow] = useState(new Date())
   const [carregandoAnalise, setCarregandoAnalise] = useState(false)
+  /** Erro real da última análise (rede, pipeline bloqueado, etc.). Mostrado na UI. */
+  const [analiseErro, setAnaliseErro] = useState<string | null>(null)
+  /** Score de integridade real (0-100) — quantos agentes retornaram dados. */
+  const [integrityScore, setIntegrityScore] = useState<number | null>(null)
+  /** Falhas reais do pipeline (agente -> tipo de erro). */
+  const [agentFailures, setAgentFailures] = useState<{ agent_name: string; error_type: string; error_message: string }[]>([])
   const [abaEsquerda, setAbaEsquerda] = useState<'operacao' | 'ativos'>('operacao')
   const [timeframe, setTimeframe] = useState<string>('H1')
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
@@ -364,6 +370,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const buscarAnalise = useCallback(async (simbolo: string, tfLabel: string) => {
     const row = resolveTfRow(tfCatalog, tfLabel)
     setCarregandoAnalise(true)
+    setAnaliseErro(null)
     try {
       const assetParam = simbolo.replace('-BRL', '') + 'BRL'
       const r = await fetch(`${API_BASE}/api/analyze/${assetParam}`, {
@@ -372,10 +379,19 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
         signal: AbortSignal.timeout(60000), // pipeline LLM real (Macro/ATLAS/ORION/News) pode levar 20-50s
       })
-      if (!r.ok) throw new Error()
+      if (!r.ok) {
+        let detail = `HTTP ${r.status}`
+        try {
+          const j = await r.json()
+          if (j?.detail) detail = String(j.detail)
+        } catch { /* corpo vazio */ }
+        throw new Error(detail)
+      }
       const data = await r.json()
       const scores: Record<string, number | null> = data.agent_scores ?? {}
-      const failures: { agent_name: string }[] = Array.isArray(data.agent_failures) ? data.agent_failures : []
+      const failures: { agent_name: string; error_type: string; error_message: string }[] =
+        Array.isArray(data.agent_failures) ? data.agent_failures : []
+      const integ = typeof data.integrity_score === 'number' ? data.integrity_score : null
       const failureSet = new Set(failures.map(f => String(f.agent_name)))
       const idToBackendName: Record<string, string> = {
         ATLAS: 'ATLAS',
@@ -401,9 +417,20 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         }
         return { ...a, score, voto }
       }))
-    } catch {
-      // Sem inflar dados: marca tudo como sem score e voto nulo.
+      setAgentFailures(failures)
+      setIntegrityScore(integ)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'falha desconhecida'
+      // Diagnóstico claro para o utilizador, em vez de "aguardando" eterno.
+      const friendly = /aborted|timeout/i.test(msg)
+        ? `Tempo esgotado (>60s). O servidor pode estar processando ou indisponivel em ${API_BASE}.`
+        : /Failed to fetch|network|TypeError/i.test(msg)
+          ? `Servidor de analise offline em ${API_BASE}. Verifique que o ai-sentinel esta rodando.`
+          : msg
+      setAnaliseErro(friendly)
       setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
+      setAgentFailures([])
+      setIntegrityScore(null)
     } finally {
       setCarregandoAnalise(false)
     }
@@ -607,7 +634,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
        * (operacaoAtiva.direcao === 'VENDA' ? -1 : 1)).toFixed(2)
     : '0.00'
 
-  const scoreFinal = agentes.find(a => a.id === 'AEGIS')?.score ?? operacaoAtiva?.score ?? null
+  // AEGIS real (sem cair em mock da operação simulada para não enganar o utilizador).
+  const scoreFinal = agentes.find(a => a.id === 'AEGIS')?.score ?? null
 
   const corScore = (s: number | null) =>
     s === null ? '#7a7060' : s >= 75 ? '#22c55e' : s >= 50 ? '#f59e0b' : '#ef4444'
@@ -968,13 +996,48 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
             <span className={styles.agentesTitulo}>Guardioes Boitata</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {carregandoAnalise && <span className={styles.analisandoChip}>Analisando...</span>}
-              {scoreFinal !== null && (
+              {scoreFinal !== null ? (
                 <span style={{ fontSize: '1rem', fontWeight: 700, color: corScore(scoreFinal) }}>
                   {scoreFinal}/100
                 </span>
+              ) : (
+                <span style={{ fontSize: '0.7rem', color: '#7a7060', fontFamily: 'var(--mono)' }}>—/100</span>
               )}
             </div>
           </div>
+
+          {(analiseErro || agentFailures.length > 0 || integrityScore != null) && (
+            <div
+              style={{
+                margin: '8px 8px 0',
+                padding: '8px 10px',
+                borderRadius: 6,
+                background: analiseErro ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.06)',
+                border: analiseErro ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(245,158,11,0.18)',
+                fontSize: 10.5,
+                lineHeight: 1.4,
+                color: analiseErro ? '#ef4444' : '#f59e0b',
+              }}
+            >
+              {analiseErro ? (
+                <div><strong>Analise indisponivel:</strong> {analiseErro}</div>
+              ) : (
+                <>
+                  {integrityScore != null && (
+                    <div style={{ color: '#d1d5db', marginBottom: agentFailures.length > 0 ? 4 : 0 }}>
+                      Integridade: {integrityScore.toFixed(0)}% dos agentes responderam
+                    </div>
+                  )}
+                  {agentFailures.length > 0 && (
+                    <div>
+                      <strong>Falhas reais:</strong>{' '}
+                      {agentFailures.map(f => `${f.agent_name} (${f.error_type})`).join(', ')}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           <div className={styles.agentesLista}>
             {agentes.map(a => (
@@ -996,7 +1059,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                     style={{ width: `${a.score ?? 0}%`, background: corScore(a.score) }} />
                 </div>
                 <div className={styles.agenteScoreTexto}>
-                  {a.score !== null ? `${a.score}/100` : 'aguardando'}
+                  {a.score !== null
+                    ? `${a.score}/100`
+                    : a.voto === 'REJEITADO'
+                      ? 'agente falhou'
+                      : carregandoAnalise
+                        ? 'analisando...'
+                        : 'aguardando'}
                 </div>
               </div>
             ))}
