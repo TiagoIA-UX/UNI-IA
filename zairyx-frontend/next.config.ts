@@ -9,6 +9,8 @@ import path from 'node:path'
  * Tokens só de backend (Groq, Telegram, etc.) não entram aqui.
  */
 const PARENT_ENV_SERVER_ALLOWLIST = new Set([
+  /** URL público do ai-sentinel (sem / final). Usado pelo rewrite /boitata-api → evita CORS no browser. */
+  'BOITATA_AI_SENTINEL_ORIGIN',
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_SECRET_KEY',
@@ -67,6 +69,13 @@ function loadParentEnvFile() {
 
 loadParentEnvFile()
 
-const nextConfig: NextConfig = {}
+const boitataUpstream = (process.env.BOITATA_AI_SENTINEL_ORIGIN || '').trim().replace(/\/$/, '')
+
+const nextConfig: NextConfig = {
+  async rewrites() {
+    if (!boitataUpstream) return []
+    return [{ source: '/boitata-api/:path*', destination: `${boitataUpstream}/:path*` }]
+  },
+}
 
 export default nextConfig

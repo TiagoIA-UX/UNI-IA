@@ -128,10 +128,30 @@ const MB_ATIVOS_SEED: Ativo[] = [
   { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'BINANCE:USDCUSDT' },
 ]
 
-const API_BASE =
-  (typeof process !== 'undefined' &&
-    (process.env.NEXT_PUBLIC_AI_API_URL || process.env.NEXT_PUBLIC_API_BASE || '').trim()) ||
-  'http://127.0.0.1:8000'
+/** Caminho interno: Next reescreve para BOITATA_AI_SENTINEL_ORIGIN (ver next.config.ts). */
+const BOITATA_API_PROXY_BASE = '/boitata-api'
+
+/**
+ * Base URL das chamadas à API ai-sentinel no browser.
+ * 1) NEXT_PUBLIC_AI_API_URL / NEXT_PUBLIC_API_BASE se definidos (override explícito).
+ * 2) Em localhost: http://127.0.0.1:8000 (dev clássico).
+ * 3) Noutro host (ex.: Vercel): mesmo site + /boitata-api (proxy server-side, sem CORS).
+ */
+const API_BASE = ((): string => {
+  const strip = (u: string) => u.replace(/\/$/, '')
+  const fromEnv = strip(
+    (typeof process !== 'undefined'
+      ? (process.env.NEXT_PUBLIC_AI_API_URL || process.env.NEXT_PUBLIC_API_BASE || '').trim()
+      : '') || ''
+  )
+  if (fromEnv) return fromEnv
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    if (h === 'localhost' || h === '127.0.0.1') return 'http://127.0.0.1:8000'
+    return strip(window.location.origin) + BOITATA_API_PROXY_BASE
+  }
+  return 'http://127.0.0.1:8000'
+})()
 
 // ─── Helpers de tempo ─────────────────────────────────────────────────────────
 function pad(n: number) { return String(n).padStart(2, '0') }
