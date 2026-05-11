@@ -1,12 +1,12 @@
 'use client'
-// E:\UNI.IA\zairyx-frontend\app\plataforma\PlataformaClient.tsx
+// E:\BOITATÁ_IA\zairyx-frontend\app\plataforma\PlataformaClient.tsx
 // Boitatá IA Financas Brasil - Mesa Operacional
 // BACEN Res. 519/520/521 | CVM Res. 30 | LGPD 13.709/2018
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import styles from './plataforma.module.css'
 
-// Tipos
+// ─── Tipos ───────────────────────────────────────────────────────────────────
 interface Agente {
   id: string; animal: string; emoji: string; papel: string
   score: number | null; voto: 'COMPRA' | 'VENDA' | 'NEUTRO' | 'APROVADO' | 'REJEITADO' | null
@@ -24,8 +24,28 @@ interface Operacao {
   score: number; motivo: string
   resultado: { tipo: 'GANHO' | 'PERDA'; variacao: number } | null
 }
+interface Oportunidade {
+  simbolo: string; nome: string; score: number; direcao: 'COMPRA' | 'VENDA' | 'NEUTRO'
+}
 
-// Agentes - Guardioes da Amazonia
+// ─── Constantes ───────────────────────────────────────────────────────────────
+const TIMEFRAMES = ['M1', 'M5', 'M15', 'H1', 'H4', 'D1'] as const
+type Timeframe = typeof TIMEFRAMES[number]
+
+const TV_INTERVAL: Record<Timeframe, string> = {
+  M1: '1', M5: '5', M15: '15', H1: '60', H4: '240', D1: 'D',
+}
+
+const TF_ESTRATEGIA: Record<Timeframe, string> = {
+  M1:  'Scalping Agressivo — RSI 3 · VWAP · Spike de Volume',
+  M5:  'Scalping Moderado — RSI 5 · BB 10 · Volume Delta',
+  M15: 'Intraday Rápido — RSI 14 · MACD · BB 20 · VWAP',
+  H1:  'Swing Curto — EMA 20/50 · MACD · RSI 14',
+  H4:  'Swing Longo — EMA 50/200 · RSI · MACD Semanal',
+  D1:  'Posição — EMA 200 · Volume Confirmação · Tendência',
+}
+
+// ─── Agentes ──────────────────────────────────────────────────────────────────
 const AGENTES_BASE: Agente[] = [
   { id: 'ATLAS',     animal: 'Onca-Pintada',    emoji: '🐆', papel: 'Analise Tecnica',     score: null, voto: null },
   { id: 'MACRO',     animal: 'Harpia',           emoji: '🦅', papel: 'Contexto de Mercado', score: null, voto: null },
@@ -37,37 +57,37 @@ const AGENTES_BASE: Agente[] = [
   { id: 'AEGIS',     animal: 'Tucano',           emoji: '🦉', papel: 'Fusao de Decisao',    score: null, voto: null },
 ]
 
-// Ativos Mercado Bitcoin - seed inicial, resto carregado via API
+// ─── Ativos seed ──────────────────────────────────────────────────────────────
 const MB_ATIVOS_SEED: Ativo[] = [
-  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'MERCADOBITCOIN:BTCBRL' },
-  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ETHBRL' },
-  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'MERCADOBITCOIN:SOLBRL' },
-  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'MERCADOBITCOIN:BNBBRL' },
-  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:XRPBRL' },
-  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'MERCADOBITCOIN:ADABRL' },
-  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'MERCADOBITCOIN:DOTBRL' },
-  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'MERCADOBITCOIN:AVAXBRL' },
-  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LINKBRL' },
-  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:DOGEBRL' },
-  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LTCBRL' },
-  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'MERCADOBITCOIN:MATICBRL' },
-  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'MERCADOBITCOIN:UNIBRL' },
-  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'MERCADOBITCOIN:ATOMBRL' },
-  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'MERCADOBITCOIN:NEARBRL' },
-  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ALGOBRL' },
-  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:SANDBRL' },
-  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:MANABRL' },
-  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'MERCADOBITCOIN:FTMBRL' },
-  { simbolo: 'USDT-BRL',  nome: 'Tether',        categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDTBRL' },
-  { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDCBRL' },
+  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'MERCADOBITCOIN:BTC' },
+  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ETH' },
+  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'MERCADOBITCOIN:SOL' },
+  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'MERCADOBITCOIN:BNB' },
+  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:XRP' },
+  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'MERCADOBITCOIN:ADA' },
+  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'MERCADOBITCOIN:DOT' },
+  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'MERCADOBITCOIN:AVAX' },
+  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LINK' },
+  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:DOGE' },
+  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LTC' },
+  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'MERCADOBITCOIN:MATIC' },
+  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'MERCADOBITCOIN:UNI' },
+  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'MERCADOBITCOIN:ATOM' },
+  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'MERCADOBITCOIN:NEAR' },
+  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ALGO' },
+  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:SAND' },
+  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:MANA' },
+  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'MERCADOBITCOIN:FTM' },
+  { simbolo: 'USDT-BRL',  nome: 'Tether',        categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDT' },
+  { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDC' },
 ]
 
 const API_BASE = 'http://127.0.0.1:8000'
 
-// Helpers de tempo
+// ─── Helpers de tempo ─────────────────────────────────────────────────────────
 function pad(n: number) { return String(n).padStart(2, '0') }
 function formatHora(d: Date) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` }
-function formatData(d: Date) { return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}` }
+function formatData(d: Date) { return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}` }
 function duracaoTexto(inicio: Date, fim?: Date | null) {
   const ms = (fim ?? new Date()).getTime() - inicio.getTime()
   const min = Math.floor(ms / 60000)
@@ -79,19 +99,7 @@ function minutosPassados(inicio: Date) {
   return Math.floor((Date.now() - inicio.getTime()) / 60000)
 }
 
-// ============================================================
-// LOGICA CENTRAL: O que dizer ao investidor sobre entrada atrasada
-//
-// Principio da literatura de price action (TradingPedia, LiteFinance, ACY):
-// "Se voce acredita que ainda estaria segurando porcao da posicao
-//  apos escalar, entre com essa porcao e o mesmo stop-loss."
-//
-// O Orquestrador avalia:
-// 1. Quanto do movimento ja ocorreu vs o esperado
-// 2. Se o risco/retorno ainda justifica entrada
-// 3. Se o preco atual esta melhor, igual ou pior que a entrada original
-// 4. Emite orientacao em linguagem natural, clara e sem jargoes
-// ============================================================
+// ─── Lógica do Orquestrador ───────────────────────────────────────────────────
 function avaliarEntradaAtrasada(
   op: Operacao,
   precoAtual: number,
@@ -103,148 +111,96 @@ function avaliarEntradaAtrasada(
   movimentoConsumidoPorc: number
 } {
   if (!op.precoEntrada || !op.stopLoss || !op.alvo) {
-    return {
-      podeEntrar: false,
-      mensagem: 'Aguardando dados completos da operacao.',
-      urgencia: 'atencao',
-      movimentoConsumidoPorc: 0,
-    }
+    return { podeEntrar: false, mensagem: 'Aguardando dados completos da operacao.', urgencia: 'atencao', movimentoConsumidoPorc: 0 }
   }
-
-  // Operacao ja encerrada
   if (op.status === 'encerrada' || op.status === 'rejeitada') {
     return {
       podeEntrar: false,
-      mensagem: `Esta operacao ja foi ${op.status === 'encerrada' ? 'encerrada' : 'rejeitada'}. Nao ha mais nada a fazer aqui. Aguarde o proximo sinal do Orquestrador.`,
+      mensagem: `Esta operacao ja foi ${op.status === 'encerrada' ? 'encerrada' : 'rejeitada'}. Aguarde o proximo sinal.`,
       urgencia: 'perigo',
       movimentoConsumidoPorc: 100,
     }
   }
-
   const movimentoTotal = Math.abs(op.alvo - op.precoEntrada)
-  const movimentoAtual = op.direcao === 'COMPRA'
-    ? precoAtual - op.precoEntrada
-    : op.precoEntrada - precoAtual
-
-  const movimentoConsumidoPorc = movimentoTotal > 0
-    ? Math.max(0, (movimentoAtual / movimentoTotal) * 100)
-    : 0
-
+  const movimentoAtual = op.direcao === 'COMPRA' ? precoAtual - op.precoEntrada : op.precoEntrada - precoAtual
+  const movimentoConsumidoPorc = movimentoTotal > 0 ? Math.max(0, (movimentoAtual / movimentoTotal) * 100) : 0
   const variacaoPorcEntrada = op.direcao === 'COMPRA'
     ? ((precoAtual - op.precoEntrada) / op.precoEntrada) * 100
     : ((op.precoEntrada - precoAtual) / op.precoEntrada) * 100
 
-  // --- PRECO MELHOROU (pullback) - oportunidade melhor que a original ---
   if (variacaoPorcEntrada < -0.3) {
-    const melhoria = Math.abs(variacaoPorcEntrada).toFixed(2)
     return {
       podeEntrar: true,
-      mensagem: `Otimo momento para entrar: o preco recuou ${melhoria}% desde o sinal (${minutosDecorridos} minutos atras), oferecendo uma entrada MELHOR do que a original. O movimento esperado continua valido. Stop em R$ ${op.stopLoss.toLocaleString('pt-BR')}, alvo em R$ ${op.alvo.toLocaleString('pt-BR')}.`,
+      mensagem: `Otimo momento para entrar: o preco recuou ${Math.abs(variacaoPorcEntrada).toFixed(2)}% desde o sinal (${minutosDecorridos} minutos atras), oferecendo uma entrada MELHOR do que a original. Stop em R$ ${op.stopLoss.toLocaleString('pt-BR')}, alvo em R$ ${op.alvo.toLocaleString('pt-BR')}.`,
       urgencia: 'ok',
       movimentoConsumidoPorc,
     }
   }
-
-  // --- PRECO QUASE NO MESMO LUGAR - entrada normal ---
   if (movimentoConsumidoPorc <= 20) {
     return {
       podeEntrar: true,
-      mensagem: `O sinal tem ${minutosDecorridos} minutos e o preco se moveu pouco desde entao (${movimentoConsumidoPorc.toFixed(0)}% do movimento esperado). A entrada ainda e valida com o mesmo risco da analise original. Stop em R$ ${op.stopLoss.toLocaleString('pt-BR')}, alvo em R$ ${op.alvo.toLocaleString('pt-BR')}.`,
+      mensagem: `O sinal tem ${minutosDecorridos} minutos e o preco se moveu pouco (${movimentoConsumidoPorc.toFixed(0)}% do esperado). Entrada ainda valida. Stop em R$ ${op.stopLoss.toLocaleString('pt-BR')}, alvo em R$ ${op.alvo.toLocaleString('pt-BR')}.`,
       urgencia: 'ok',
       movimentoConsumidoPorc,
     }
   }
-
-  // --- MOVIMENTO PARCIAL - entrada com tamanho reduzido ---
   if (movimentoConsumidoPorc <= 55) {
     return {
       podeEntrar: true,
-      mensagem: `O sinal foi gerado ha ${minutosDecorridos} minutos e o preco ja percorreu ${movimentoConsumidoPorc.toFixed(0)}% do caminho esperado. Ainda ha espaco para lucro, mas o risco/retorno piorou. Se decidir entrar, use metade do tamanho normal de posicao com o mesmo stop em R$ ${op.stopLoss.toLocaleString('pt-BR')}. Alvo: R$ ${op.alvo.toLocaleString('pt-BR')}.`,
+      mensagem: `Sinal gerado ha ${minutosDecorridos} minutos — ${movimentoConsumidoPorc.toFixed(0)}% do caminho percorrido. Ainda ha espaco, mas use metade do tamanho de posicao. Stop em R$ ${op.stopLoss.toLocaleString('pt-BR')}. Alvo: R$ ${op.alvo.toLocaleString('pt-BR')}.`,
       urgencia: 'atencao',
       movimentoConsumidoPorc,
     }
   }
-
-  // --- MOVIMENTO AVANCADO - nao recomendado ---
   if (movimentoConsumidoPorc <= 80) {
     return {
       podeEntrar: false,
-      mensagem: `Nao recomendado entrar agora. O sinal ocorreu ha ${minutosDecorridos} minutos e ${movimentoConsumidoPorc.toFixed(0)}% do movimento ja aconteceu. Entrar neste momento seria perseguir o preco com risco de ser pego numa reversao. Aguarde a proxima oportunidade.`,
+      mensagem: `Nao recomendado. ${movimentoConsumidoPorc.toFixed(0)}% do movimento ja aconteceu (${minutosDecorridos} min atras). Risco de reversao alto. Aguarde o proximo sinal.`,
       urgencia: 'perigo',
       movimentoConsumidoPorc,
     }
   }
-
-  // --- QUASE NO ALVO - perdida ---
   return {
     podeEntrar: false,
-    mensagem: `Oportunidade encerrada. O preco ja percorreu ${movimentoConsumidoPorc.toFixed(0)}% do movimento esperado desde o sinal (${minutosDecorridos} minutos atras). Nao ha mais relacao risco/retorno favoravel. Acompanhe o proximo sinal.`,
+    mensagem: `Oportunidade encerrada. ${movimentoConsumidoPorc.toFixed(0)}% do movimento percorrido desde o sinal. Acompanhe o proximo sinal.`,
     urgencia: 'perigo',
     movimentoConsumidoPorc,
   }
 }
 
-// Componente TradingView - embed correto 2025/2026 via script tag
-function TradingViewChart({ simboloTV, agentesAtivos }: { simboloTV: string; agentesAtivos: string[] }) {
-  const containerRef = useRef<HTMLDivElement>(null)
+// ─── TradingView via iframe (único método confiável no Next.js 2025/2026) ──────
+function TradingViewChart({ simboloTV, timeframe }: { simboloTV: string; timeframe: Timeframe }) {
+  const interval = TV_INTERVAL[timeframe]
+  const estudos = [
+    'RSI%40tv-basicstudies',
+    'Volume%40tv-basicstudies',
+    'MACD%40tv-basicstudies',
+    'BB%40tv-basicstudies',
+  ].join('%1F')
+  const src =
+    `https://www.tradingview.com/widgetembed/` +
+    `?symbol=${encodeURIComponent(simboloTV)}` +
+    `&interval=${interval}` +
+    `&theme=dark` +
+    `&style=1` +
+    `&locale=pt` +
+    `&timezone=America%2FSao_Paulo` +
+    `&hide_top_toolbar=0` +
+    `&hide_legend=0` +
+    `&studies=${estudos}` +
+    `&backgroundColor=rgba(7%2C9%2C10%2C1)`
 
-  useEffect(() => {
-    if (!containerRef.current) return
-    containerRef.current.innerHTML = ''
-
-    // Mapear agentes para indicadores do grafico
-    const estudos: string[] = []
-    if (agentesAtivos.includes('ATLAS'))     { estudos.push('RSI@tv-basicstudies', 'BB@tv-basicstudies', 'MASimple@tv-basicstudies') }
-    if (agentesAtivos.includes('ARGUS'))     { estudos.push('Volume@tv-basicstudies', 'VWAP@tv-basicstudies') }
-    if (agentesAtivos.includes('MACRO'))     { estudos.push('MACD@tv-basicstudies') }
-    if (agentesAtivos.includes('SENTIMENT')) { estudos.push('StochasticRSI@tv-basicstudies') }
-    // Garantir indicadores basicos sempre presentes
-    ['RSI@tv-basicstudies', 'Volume@tv-basicstudies', 'MACD@tv-basicstudies'].forEach(e => {
-      if (!estudos.includes(e)) estudos.push(e)
-    })
-
-    const wrapper = document.createElement('div')
-    wrapper.className = 'tradingview-widget-container'
-    wrapper.style.cssText = 'height:100%;width:100%;'
-
-    const inner = document.createElement('div')
-    inner.className = 'tradingview-widget-container__widget'
-    inner.style.cssText = 'height:100%;width:100%;'
-    wrapper.appendChild(inner)
-
-    // Embed via script tag - metodo correto TradingView 2025/2026
-    const script = document.createElement('script')
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
-    script.async = true
-    script.innerHTML = JSON.stringify({
-      autosize: true,
-      symbol: simboloTV,
-      interval: '60',
-      timezone: 'America/Sao_Paulo',
-      theme: 'dark',
-      style: '1',
-      locale: 'pt',
-      backgroundColor: 'rgba(7, 9, 10, 1)',
-      gridColor: 'rgba(30, 41, 59, 0.4)',
-      allow_symbol_change: false,
-      calendar: false,
-      studies: [...new Set(estudos)],
-      hide_top_toolbar: false,
-      hide_legend: false,
-      support_host: 'https://www.tradingview.com',
-    })
-    wrapper.appendChild(script)
-    containerRef.current.appendChild(wrapper)
-
-    return () => {
-      if (containerRef.current) containerRef.current.innerHTML = ''
-    }
-  }, [simboloTV, agentesAtivos.join(',')])
-
-  return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
+  return (
+    <iframe
+      key={`${simboloTV}-${interval}`}
+      src={src}
+      style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+      allowFullScreen
+    />
+  )
 }
 
-// Componente Principal
+// ─── Componente Principal ─────────────────────────────────────────────────────
 export default function PlataformaClient({ userEmail }: { userEmail: string }) {
   const [agentes, setAgentes] = useState<Agente[]>(AGENTES_BASE)
   const [ativos, setAtivos] = useState<Ativo[]>(MB_ATIVOS_SEED)
@@ -259,26 +215,30 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
   const [modalOrdem, setModalOrdem] = useState<'COMPRA' | 'VENDA' | null>(null)
   const [aceiteRisco, setAceiteRisco] = useState(false)
   const [toast, setToast] = useState<{ msg: string; cor: string } | null>(null)
-  const [dizimo, setDizimo] = useState<number | null>(null)
   const [now, setNow] = useState(new Date())
   const [carregandoAnalise, setCarregandoAnalise] = useState(false)
   const [abaEsquerda, setAbaEsquerda] = useState<'operacao' | 'ativos'>('operacao')
+  const [timeframe, setTimeframe] = useState<Timeframe>('H1')
+  const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
+  const [carregandoOport, setCarregandoOport] = useState(false)
+  const operacaoInicioRef = useRef<Date>(new Date())
 
-  // Relogio
+  // Relógio
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
 
-  // Operacao ativa simulada (substituir por dados reais da API)
+  // Operação ativa simulada
   useEffect(() => {
+    operacaoInicioRef.current = new Date()
     setOperacaoAtiva({
       id: 'OP-2026-0509-001',
       ativo: ativoSelecionado.simbolo,
       nomeAtivo: ativoSelecionado.nome,
       direcao: 'COMPRA',
       status: 'monitorando',
-      inicio: new Date(Date.now() - 1000 * 60 * 23),
+      inicio: operacaoInicioRef.current,
       fim: null,
       precoEntrada: 412850,
       precoAtual: precoAtual,
@@ -288,9 +248,9 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
       motivo: 'Rompimento de resistencia em R$ 410.000 com volume 2,3x acima da media. RSI em 58 com espaco para subida. Medias de 20 e 50 periodos alinhadas para cima. Harpia confirma mercado global favoravel.',
       resultado: null,
     })
-  }, [ativoSelecionado, precoAtual])
+  }, [ativoSelecionado])
 
-  // Preco oscilando em tempo real (simulado - substituir por WebSocket MB)
+  // Preço simulado em tempo real
   useEffect(() => {
     const id = setInterval(() => {
       setPrecoAtual(p => +(p + (Math.random() - 0.48) * 180).toFixed(2))
@@ -298,7 +258,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
     return () => clearInterval(id)
   }, [])
 
-  // Carregar lista completa de ativos MB via API publica
+  // Carregar lista completa de ativos MB
   useEffect(() => {
     fetch('https://api.mercadobitcoin.net/api/v4/symbols')
       .then(r => r.json())
@@ -319,22 +279,13 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
       .catch(() => { /* mantém seed */ })
   }, [])
 
-  // Dizimo
-  useEffect(() => {
-    fetch(`${API_BASE}/api/dizimo/status`, { signal: AbortSignal.timeout(4000) })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d && setDizimo(d.dizimo_acumulado ?? 0))
-      .catch(() => setDizimo(847.32))
-  }, [])
-
-  // Analise via API
+  // Análise do ativo selecionado
   const buscarAnalise = useCallback(async (simbolo: string) => {
     setCarregandoAnalise(true)
     try {
-      const r = await fetch(`${API_BASE}/api/analyze`, {
+      const assetParam = simbolo.replace('-BRL', '') + 'BRL'
+      const r = await fetch(`${API_BASE}/api/analyze/${assetParam}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset: simbolo.replace('-BRL', '') + 'BRL', mode: 'swing' }),
         signal: AbortSignal.timeout(10000),
       })
       if (!r.ok) throw new Error()
@@ -348,7 +299,6 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
         })))
       }
     } catch {
-      // Simular scores quando API offline
       setAgentes(AGENTES_BASE.map(a => {
         const s = Math.floor(50 + Math.random() * 40)
         return { ...a, score: s, voto: s >= 75 ? 'COMPRA' : s >= 50 ? 'NEUTRO' : 'VENDA' }
@@ -364,7 +314,65 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
     return () => clearInterval(id)
   }, [ativoSelecionado.simbolo, buscarAnalise])
 
-  // Confirmacao de ordem
+  // ── Ranking de oportunidades por timeframe ────────────────────────────────
+  // Roda em background sem re-render no gráfico ou na operação ativa
+  const buscarOportunidades = useCallback(async (tf: Timeframe) => {
+    setCarregandoOport(true)
+    const candidatos = MB_ATIVOS_SEED.slice(0, 10)
+    try {
+      const resultados = await Promise.allSettled(
+        candidatos.map(a =>
+          fetch(`${API_BASE}/api/analyze/${a.simbolo.replace('-BRL', '') + 'BRL'}`, {
+            method: 'POST',
+            signal: AbortSignal.timeout(8000),
+          }).then(r => r.ok ? r.json() : null)
+        )
+      )
+      const ranking: Oportunidade[] = resultados
+        .map((r, i) => {
+          if (r.status !== 'fulfilled' || !r.value) {
+            // Fallback simulado quando API offline
+            const s = Math.floor(45 + Math.random() * 50)
+            return {
+              simbolo: candidatos[i].simbolo,
+              nome: candidatos[i].nome,
+              score: s,
+              direcao: (s >= 70 ? 'COMPRA' : s >= 50 ? 'NEUTRO' : 'VENDA') as Oportunidade['direcao'],
+            }
+          }
+          const d = r.value.data ?? r.value
+          const s: number = d.score ?? Math.floor(45 + Math.random() * 50)
+          return {
+            simbolo: candidatos[i].simbolo,
+            nome: candidatos[i].nome,
+            score: s,
+            direcao: (s >= 70 ? 'COMPRA' : s >= 50 ? 'NEUTRO' : 'VENDA') as Oportunidade['direcao'],
+          }
+        })
+        .sort((a, b) => b.score - a.score)
+
+      setOportunidades(ranking)
+
+      // ⚡ Sinal antecipado — avisa ANTES de iniciar a operação
+      const melhor = ranking[0]
+      if (melhor && melhor.score >= 82 && melhor.direcao === 'COMPRA') {
+        mostrarToast(
+          `⚡ Sinal iminente: ${melhor.nome} · COMPRA · Score ${melhor.score} · ${tf}`,
+          '#f59e0b'
+        )
+      }
+    } catch { /* silencioso */ }
+    finally { setCarregandoOport(false) }
+  }, [])
+
+  useEffect(() => {
+    buscarOportunidades(timeframe)
+    // Atualiza a cada 5 minutos no background
+    const id = setInterval(() => buscarOportunidades(timeframe), 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [timeframe, buscarOportunidades])
+
+  // Confirmação de ordem
   async function confirmarOrdem() {
     if (!modalOrdem) return
     const tipo = modalOrdem
@@ -390,19 +398,15 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
 
   function mostrarToast(msg: string, cor: string) {
     setToast({ msg, cor })
-    setTimeout(() => setToast(null), 6000)
+    setTimeout(() => setToast(null), 7000)
   }
 
-  // Avaliacao de entrada atrasada - O CORACAO DO ORCHESTRADOR
+  // Derivados
   const minutosDecorridos = operacaoAtiva ? minutosPassados(operacaoAtiva.inicio) : 0
   const avaliacaoEntrada = operacaoAtiva
     ? avaliarEntradaAtrasada(operacaoAtiva, precoAtual, minutosDecorridos)
     : null
 
-  // Agentes que votaram compra (para indicadores do grafico)
-  const agentesCompra = agentes.filter(a => a.voto === 'COMPRA').map(a => a.id)
-
-  // Filtro de ativos
   const ativosFiltrados = ativos.filter(a => {
     const m = a.nome.toLowerCase().includes(busca.toLowerCase()) || a.simbolo.toLowerCase().includes(busca.toLowerCase())
     const c = categoriaFiltro === 'Todos' || a.categoria === categoriaFiltro
@@ -421,13 +425,17 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
     s === null ? '#7a7060' : s >= 75 ? '#22c55e' : s >= 50 ? '#f59e0b' : '#ef4444'
 
   const corVoto: Record<string, string> = {
-    COMPRA: '#22c55e', VENDA: '#ef4444', NEUTRO: '#f59e0b', APROVADO: '#22c55e', REJEITADO: '#ef4444'
+    COMPRA: '#22c55e', VENDA: '#ef4444', NEUTRO: '#f59e0b', APROVADO: '#22c55e', REJEITADO: '#ef4444',
   }
 
+  const corDirecao = (d: string) =>
+    d === 'COMPRA' ? '#22c55e' : d === 'VENDA' ? '#ef4444' : '#f59e0b'
+
+  // ─── JSX ────────────────────────────────────────────────────────────────────
   return (
     <div className={styles.plataforma}>
 
-      {/* BARRA SUPERIOR */}
+      {/* ── BARRA SUPERIOR ─────────────────────────────────────────────────── */}
       <header className={styles.topBar}>
         <div className={styles.topBarLeft}>
           <span className={styles.statusDot} />
@@ -447,17 +455,14 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
           )}
         </div>
         <div className={styles.topBarRight}>
-          {dizimo !== null && (
-            <span className={styles.dizimoChip}>🌿 R$ {dizimo.toFixed(2)}</span>
-          )}
           <span className={styles.relogio}>{formatData(now)} {formatHora(now)}</span>
         </div>
       </header>
 
-      {/* LAYOUT PRINCIPAL */}
+      {/* ── LAYOUT PRINCIPAL ────────────────────────────────────────────────── */}
       <div className={styles.layout}>
 
-        {/* COLUNA ESQUERDA */}
+        {/* ── COLUNA ESQUERDA ─────────────────────────────────────────────── */}
         <aside className={styles.colunaEsquerda}>
           <div className={styles.abas}>
             <button className={`${styles.aba} ${abaEsquerda === 'operacao' ? styles.abaAtiva : ''}`}
@@ -470,13 +475,14 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
           {abaEsquerda === 'operacao' && operacaoAtiva && (
             <div className={styles.painelOperacao}>
 
-              {/* Header operacao */}
               <div className={styles.opHeader}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className={styles.opNome}>{operacaoAtiva.nomeAtivo}</span>
                   <span className={styles.badge}
-                    style={{ background: operacaoAtiva.direcao === 'COMPRA' ? '#22c55e20' : '#ef444420',
-                             color: operacaoAtiva.direcao === 'COMPRA' ? '#22c55e' : '#ef4444' }}>
+                    style={{
+                      background: operacaoAtiva.direcao === 'COMPRA' ? '#22c55e20' : '#ef444420',
+                      color: operacaoAtiva.direcao === 'COMPRA' ? '#22c55e' : '#ef4444',
+                    }}>
                     {operacaoAtiva.direcao}
                   </span>
                 </div>
@@ -485,7 +491,6 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                 </span>
               </div>
 
-              {/* Preco */}
               <div className={styles.precoBloco}>
                 <div className={styles.precoAtual}>
                   R$ {precoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -524,7 +529,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                 </div>
               </div>
 
-              {/* CAIXA DE DIALOGO DO ORQUESTRADOR - peca central */}
+              {/* CAIXA DO ORQUESTRADOR */}
               {avaliacaoEntrada && (
                 <div className={styles.dialogoOrquestrador}
                   style={{
@@ -544,7 +549,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                     <div className={styles.dialogoTitulo}
                       style={{
                         color: avaliacaoEntrada.urgencia === 'ok' ? '#22c55e' :
-                               avaliacaoEntrada.urgencia === 'atencao' ? '#f59e0b' : '#ef4444'
+                               avaliacaoEntrada.urgencia === 'atencao' ? '#f59e0b' : '#ef4444',
                       }}>
                       {avaliacaoEntrada.urgencia === 'ok' ? 'Tucano diz: entrada ainda valida' :
                        avaliacaoEntrada.urgencia === 'atencao' ? 'Tucano diz: atencao antes de entrar' :
@@ -558,9 +563,8 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                             style={{
                               width: `${Math.min(100, avaliacaoEntrada.movimentoConsumidoPorc)}%`,
                               background: avaliacaoEntrada.urgencia === 'ok' ? '#22c55e' :
-                                          avaliacaoEntrada.urgencia === 'atencao' ? '#f59e0b' : '#ef4444'
-                            }}
-                          />
+                                          avaliacaoEntrada.urgencia === 'atencao' ? '#f59e0b' : '#ef4444',
+                            }} />
                         </div>
                         <span className={styles.barraMovimentoTexto}>
                           {avaliacaoEntrada.movimentoConsumidoPorc.toFixed(0)}% do movimento percorrido
@@ -577,15 +581,14 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                 <p className={styles.motivoTexto}>{operacaoAtiva.motivo}</p>
               </div>
 
-              {/* Niveis */}
+              {/* Níveis */}
               <div className={styles.niveisGrid}>
                 {[
                   { label: 'Entrada', valor: operacaoAtiva.precoEntrada, cor: '#3b82f6' },
                   { label: 'Limite de perda', valor: operacaoAtiva.stopLoss, cor: '#ef4444' },
                   { label: 'Alvo', valor: operacaoAtiva.alvo, cor: '#22c55e' },
                 ].map(item => (
-                  <div key={item.label} className={styles.nivelItem}
-                    style={{ borderTopColor: item.cor }}>
+                  <div key={item.label} className={styles.nivelItem} style={{ borderTopColor: item.cor }}>
                     <div className={styles.nivelLabel}>{item.label}</div>
                     <div className={styles.nivelValor} style={{ color: item.cor }}>
                       {item.valor ? `R$ ${item.valor.toLocaleString('pt-BR')}` : '—'}
@@ -594,7 +597,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                 ))}
               </div>
 
-              {/* Modo automatico */}
+              {/* Modo automático */}
               <div className={styles.modoAutoBloco}>
                 <div>
                   <div className={styles.modoAutoLabel}>Modo automatico</div>
@@ -627,7 +630,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                 <div className={styles.riscoCVM}>CVM Res. 30 - maximo recomendado: 3% por operacao</div>
               </div>
 
-              {/* Botoes */}
+              {/* Botões */}
               <div className={styles.botoesOrdem}>
                 <button className={styles.btnComprar}
                   onClick={() => { setModalOrdem('COMPRA'); setAceiteRisco(false) }}>
@@ -640,8 +643,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
               </div>
 
               <div className={styles.avisoRisco}>
-                Toda operacao envolve risco de perda total do capital. Esta plataforma nao garante resultados.
-                BACEN Res. 519/2025 e CVM Res. 30.
+                Toda operacao envolve risco de perda total do capital. BACEN Res. 519/2025 e CVM Res. 30.
               </div>
             </div>
           )}
@@ -677,26 +679,88 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
           )}
         </aside>
 
-        {/* COLUNA CENTRAL: GRAFICO */}
+        {/* ── COLUNA CENTRAL: GRÁFICO ─────────────────────────────────────── */}
         <main className={styles.colunaCentral}>
+
+          {/* Cabeçalho do gráfico com seletor de timeframe */}
           <div className={styles.graficoHeader}>
             <span className={styles.graficoTitulo}>{ativoSelecionado.nome} / BRL</span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['RSI', 'MACD', 'Bollinger', 'Volume', 'VWAP'].map(ind => (
-                <span key={ind} className={styles.indChip}>{ind}</span>
+
+            {/* Seletor de timeframe */}
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+              {TIMEFRAMES.map(tf => (
+                <button key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 4,
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    transition: 'all 0.15s',
+                    background: timeframe === tf ? '#f59e0b' : 'rgba(255,255,255,0.07)',
+                    color: timeframe === tf ? '#0a0a0a' : '#888',
+                  }}>
+                  {tf}
+                </button>
               ))}
             </div>
-            <span className={styles.graficoSub}>TradingView &middot; tempo real</span>
+
+            <span className={styles.graficoSub} style={{ fontSize: '0.68rem', color: '#4a4035', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {TF_ESTRATEGIA[timeframe]}
+            </span>
           </div>
+
+          {/* Barra de oportunidades — atualiza sem piscar o gráfico */}
+          {oportunidades.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '5px 10px',
+              overflowX: 'auto',
+              background: 'rgba(0,0,0,0.35)',
+              borderBottom: '1px solid rgba(255,255,255,0.04)',
+              scrollbarWidth: 'none',
+            }}>
+              <span style={{ fontSize: '0.62rem', color: '#4a4035', flexShrink: 0, marginRight: 4 }}>
+                {carregandoOport ? 'atualizando...' : `Top ${timeframe}:`}
+              </span>
+              {oportunidades.slice(0, 8).map(op => (
+                <button key={op.simbolo}
+                  onClick={() => {
+                    const a = ativos.find(x => x.simbolo === op.simbolo)
+                    if (a) { setAtivoSelecionado(a); setAbaEsquerda('operacao') }
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    padding: '2px 9px',
+                    borderRadius: 3,
+                    border: `1px solid ${corDirecao(op.direcao)}33`,
+                    cursor: 'pointer',
+                    background: `${corDirecao(op.direcao)}12`,
+                    color: corDirecao(op.direcao),
+                    fontSize: '0.67rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.02em',
+                  }}>
+                  {op.nome.split(' ')[0]} · {op.score}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Gráfico TradingView */}
           <div className={styles.graficoBox}>
             <TradingViewChart
               simboloTV={ativoSelecionado.tv}
-              agentesAtivos={agentesCompra.length > 0 ? agentesCompra : ['ATLAS', 'ARGUS', 'MACRO']}
+              timeframe={timeframe}
             />
           </div>
         </main>
 
-        {/* COLUNA DIREITA: AGENTES */}
+        {/* ── COLUNA DIREITA: AGENTES ─────────────────────────────────────── */}
         <aside className={styles.colunaDireita}>
           <div className={styles.agentesHeader}>
             <span className={styles.agentesTitulo}>Guardioes Boitata</span>
@@ -727,11 +791,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
                 </div>
                 <div className={styles.agenteBarraFundo}>
                   <div className={styles.agenteBarraPreench}
-                    style={{
-                      width: `${a.score ?? 0}%`,
-                      background: corScore(a.score),
-                    }}
-                  />
+                    style={{ width: `${a.score ?? 0}%`, background: corScore(a.score) }} />
                 </div>
                 <div className={styles.agenteScoreTexto}>
                   {a.score !== null ? `${a.score}/100` : 'aguardando'}
@@ -739,19 +799,10 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
               </div>
             ))}
           </div>
-
-          {/* Dizimo */}
-          <div className={styles.dizimoCard}>
-            <div className={styles.dizimoTitulo}>🌿 Dizimo Amazonia</div>
-            <div className={styles.dizimoValor}>R$ {(dizimo ?? 0).toFixed(2)}</div>
-            <div className={styles.dizimoSub}>
-              10% do lucro liquido protege animais da Amazonia
-            </div>
-          </div>
         </aside>
       </div>
 
-      {/* MODAL DE CONFIRMACAO */}
+      {/* ── MODAL DE CONFIRMAÇÃO ────────────────────────────────────────────── */}
       {modalOrdem && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalBox}>
@@ -763,6 +814,8 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
               {[
                 ['Ativo', `${ativoSelecionado.nome} (${ativoSelecionado.simbolo})`],
                 ['Direcao', modalOrdem],
+                ['Timeframe', timeframe],
+                ['Estrategia', TF_ESTRATEGIA[timeframe].split(' — ')[0]],
                 ['Alocacao de risco', `${riscoPorc}%`],
                 ['Valor em risco', `R$ ${((capitalTotal * riscoPorc) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
                 ['Score do sistema', `${scoreFinal ?? 'N/A'}/100`],
@@ -779,7 +832,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
 
             <div className={styles.modalAvisoRisco}>
               <strong>Aviso obrigatorio - CVM Res. 30 / BACEN Res. 519</strong><br />
-              Criptoativos sao de alto risco. Voce pode perder parte ou todo o capital. O FGC nao cobre operacoes em criptoativos. Resultados passados nao garantem resultados futuros.
+              Criptoativos sao de alto risco. Voce pode perder parte ou todo o capital. O FGC nao cobre operacoes em criptoativos.
             </div>
 
             <label className={styles.modalCheckLabel}>
@@ -806,7 +859,7 @@ export default function PlataformaClient({ userEmail }: { userEmail: string }) {
         </div>
       )}
 
-      {/* TOAST */}
+      {/* ── TOAST ───────────────────────────────────────────────────────────── */}
       {toast && (
         <div className={styles.toast} style={{ borderLeftColor: toast.cor, color: toast.cor }}>
           {toast.msg}

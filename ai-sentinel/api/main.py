@@ -32,6 +32,15 @@ load_dotenv(ENV_PATH)
 # Configuração de CORS Dinâmico
 _raw_origins = _os.getenv("ALLOWED_ORIGINS", "")
 _allowed_origins: List[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+# Sempre inclui localhost em desenvolvimento
+_dev_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+for _o in _dev_origins:
+    if _o not in _allowed_origins:
+        _allowed_origins.append(_o)
+
+_safe_origins = [o for o in _allowed_origins if o != "*"]
+if not _safe_origins:
+    _safe_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 app = FastAPI(
     title="UNI IA",
@@ -41,10 +50,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
+    allow_origins=_safe_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # --- Inicialização de Singletons ---
@@ -119,32 +128,7 @@ async def shutdown_signal_scanner():
     signal_scanner.stop()
     telegram_control.stop()
 
-# --- Endpoints ESG & Dashboard (Tarefa 3) ---
-@app.post("/api/operations/simulate", status_code=status.HTTP_201_CREATED, tags=["ESG"])
-async def simulate_operation(op: OperationRequest):
-    """Calcula dízimo ambiental (10%) e registra provisão ESG."""
-    try:
-        total_bruto = op.amount * op.price
-        dizimo = total_bruto * 0.10
-        
-        audit_service.log_event(
-            "esg.tithe_provision",
-            "success",
-            asset=op.symbol,
-            details={"bruto": total_bruto, "dizimo": dizimo, "side": op.side}
-        )
-        
-        return {
-            "status": "success",
-            "metrics": {
-                "bruto": round(total_bruto, 2),
-                "dizimo_amazonia": round(dizimo, 2),
-                "total_final": round(total_bruto + dizimo, 2)
-            }
-        }
-    except Exception as e:
-        logger.error(f"Erro na simulação ESG: {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar métricas ESG.")
+# --- ESG removido — reservado para fase futura ---
 
 @app.get("/api/signals/status", tags=["Monitoramento"])
 def signals_status():
