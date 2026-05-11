@@ -249,7 +249,7 @@ function TradingViewChart({ simboloTV, interval }: { simboloTV: string; interval
     `&style=1` +
     `&locale=pt` +
     `&timezone=America%2FSao_Paulo` +
-    `&hide_top_toolbar=0` +
+    `&hide_top_toolbar=1` +
     `&hide_legend=1` +
     `&hide_side_toolbar=1` +
     `&withdateranges=0` +
@@ -552,7 +552,20 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       const friendly = aborted
         ? `Tempo esgotado (>60s). O servidor pode estar processando, sobrecarregado ou indisponivel em ${API_BASE}.`
         : /Failed to fetch|network|TypeError/i.test(msg)
-          ? `Servidor de analise offline em ${API_BASE}. Verifique que o ai-sentinel esta rodando.`
+          ? (() => {
+              const host =
+                typeof window !== 'undefined' ? window.location.hostname : ''
+              const apiIsLoopback = /127\.0\.0\.1|localhost/i.test(API_BASE)
+              const uiIsRemote = host && host !== 'localhost' && host !== '127.0.0.1'
+              if (apiIsLoopback && uiIsRemote) {
+                return (
+                  `A plataforma abriu em "${host}" mas a API esta em ${API_BASE} (só o seu PC). ` +
+                  'Defina NEXT_PUBLIC_AI_API_URL com o URL publico do ai-sentinel e faça novo build, ' +
+                  'ou use zairyx-frontend/.env.local com essa variável em dev.'
+                )
+              }
+              return `Servidor de analise offline ou bloqueado (CORS/rede) em ${API_BASE}. Verifique se o ai-sentinel esta a correr e acessivel a partir deste browser.`
+            })()
           : msg
       console.warn('[Boitata] analyze ERROR', { ms: Date.now() - startedAt, msg, friendly })
       setAnaliseErro(friendly)
@@ -1100,7 +1113,10 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
 
           {/* Cabeçalho do gráfico com seletor de timeframe */}
           <div className={styles.graficoHeader}>
-            <span className={styles.graficoTitulo}>{ativoSelecionado.nome} / BRL</span>
+            <span className={styles.graficoTitulo} title={ativoSelecionado.simbolo}>
+              {ativoSelecionado.nome}
+              <span className={styles.graficoTituloSym}> {ativoSelecionado.simbolo}</span>
+            </span>
 
             <div className={styles.tfRail} role="tablist" aria-label="Timeframe do grafico">
               {tfRowsUi.map(tf => (
@@ -1117,16 +1133,26 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
               ))}
             </div>
 
-            <div className={styles.tfHintBlock}>
-              <span className={styles.graficoSub}>{tfRow.strategy_hint}</span>
-              {tfRow.strategy_family ? (
-                <span className={styles.graficoFamilia} title={tfRow.strategy_family_note ?? undefined}>
-                  Motor: {tfRow.strategy_family}
-                </span>
-              ) : null}
-              {tfRow.agent_alignment ? (
-                <span className={styles.graficoAgentAlign}>{tfRow.agent_alignment}</span>
-              ) : null}
+            <div
+              className={styles.tfHintBlock}
+              title={[
+                tfRow.strategy_hint,
+                tfRow.strategy_family ? `Motor: ${tfRow.strategy_family}` : '',
+                tfRow.strategy_family_note ?? '',
+                tfRow.agent_alignment ?? '',
+              ]
+                .filter(Boolean)
+                .join('\n')}
+            >
+              <span className={styles.graficoSub}>
+                {[
+                  tfRow.strategy_hint,
+                  tfRow.strategy_family ? `Motor: ${tfRow.strategy_family}` : '',
+                  tfRow.agent_alignment ?? '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
             </div>
           </div>
 
@@ -1136,7 +1162,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                 {carregandoOport ? 'Atualizando' : 'Prioridade'}
               </span>
               <span className={styles.graficoAgentAlign} style={{ flexShrink: 0, marginRight: 6 }}>
-                {timeframe} · acerto→score
+                acerto → score
               </span>
               {oportunidades.slice(0, 10).map(op => (
                 <button

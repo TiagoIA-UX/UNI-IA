@@ -3,19 +3,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 /**
- * Chaves permitidas ao ler `../.env.local` (raiz do monorepo).
- * Objetivo: o Next não importar para o processo Node tokens só do backend
- * (Groq, Telegram, etc.) — esses ficam para o Python ler o mesmo ficheiro.
- * Amplie esta lista se adicionar novas variáveis usadas pelo zairyx-frontend.
+ * Chaves não públicas permitidas ao ler `../.env.local` (raiz do monorepo).
+ * Tudo o que começa por `NEXT_PUBLIC_` também é aceite (wildcard), para não
+ * quebrar novas variáveis públicas nem URLs alternativas da API.
+ * Tokens só de backend (Groq, Telegram, etc.) não entram aqui.
  */
-const PARENT_ENV_ALLOWLIST = new Set([
-  'NEXT_PUBLIC_AI_API_URL',
-  'NEXT_PUBLIC_API_BASE',
-  'NEXT_PUBLIC_SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
-  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-  'NEXT_PUBLIC_MB_SIGNAL_ASSETS',
-  'NEXT_PUBLIC_SITE_URL',
+const PARENT_ENV_SERVER_ALLOWLIST = new Set([
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_SECRET_KEY',
@@ -27,6 +20,10 @@ const PARENT_ENV_ALLOWLIST = new Set([
   'RESEND_API_KEY',
   'RESEND_FROM_EMAIL',
 ])
+
+function isParentEnvKeyAllowed(key: string): boolean {
+  return key.startsWith('NEXT_PUBLIC_') || PARENT_ENV_SERVER_ALLOWLIST.has(key)
+}
 
 function loadParentEnvFile() {
   const envPath = path.join(__dirname, '..', '.env.local')
@@ -53,7 +50,7 @@ function loadParentEnvFile() {
     const key = line.slice(0, separatorIndex).trim()
     let value = line.slice(separatorIndex + 1).trim()
 
-    if (!key || !PARENT_ENV_ALLOWLIST.has(key) || process.env[key]) {
+    if (!key || !isParentEnvKeyAllowed(key) || process.env[key]) {
       continue
     }
 

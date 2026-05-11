@@ -749,11 +749,13 @@
 
 .tfHintBlock {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
   margin-left: auto;
   text-align: right;
-  max-width: min(100%, 320px);
+  max-width: min(100%, 38%);
+  min-width: 0;
 }
 
 .graficoSub {
@@ -763,6 +765,9 @@
   font-family: var(--sans);
   font-weight: 500;
   line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .graficoFamilia {
@@ -788,6 +793,13 @@
   font-weight: 700;
   color: var(--text-1);
   flex-shrink: 0;
+}
+
+.graficoTituloSym {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
 }
 
 .indChip {
