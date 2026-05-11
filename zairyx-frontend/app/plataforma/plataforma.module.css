@@ -295,6 +295,19 @@
   margin-bottom: 8px;
 }
 
+.ldtTfEscopo {
+  font-size: 10px;
+  color: var(--text-2);
+  margin: -4px 0 10px;
+  line-height: 1.4;
+  font-family: var(--mono);
+}
+
+.ldtTfEscopo strong {
+  color: #f0c14b;
+  font-weight: 700;
+}
+
 .ldtGrid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

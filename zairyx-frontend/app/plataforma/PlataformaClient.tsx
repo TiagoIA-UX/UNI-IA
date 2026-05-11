@@ -152,19 +152,26 @@ function minutosPassados(inicio: Date) {
 function avaliarEntradaAtrasada(
   op: Operacao,
   precoAtual: number,
-  minutosDecorridos: number
+  minutosDecorridos: number,
+  /** Ex.: "M1 (motor: 1m)" — obrigatório para texto coerente com o TF do gráfico. */
+  tfLinha: string
 ): {
   podeEntrar: boolean
   mensagem: string
   urgencia: 'ok' | 'atencao' | 'perigo'
   movimentoConsumidoPorc: number
+  /** Quando AEGIS ainda não fundiu — UI não deve dizer "atenção antes de entrar". */
+  dialogoVariant?: 'consolidacao'
 } {
   if (op.status === 'aguardando') {
     return {
       podeEntrar: false,
-      mensagem: 'Aguardando o motor (AEGIS) consolidar a analise dos agentes para este timeframe.',
+      mensagem:
+        `Aguardando o motor (AEGIS) consolidar a analise para o timeframe ${tfLinha}. ` +
+        'O primeiro relogio da linha do tempo marca desde que escolheu este ativo neste TF — ainda nao e o horario do sinal consolidado.',
       urgencia: 'atencao',
       movimentoConsumidoPorc: 0,
+      dialogoVariant: 'consolidacao',
     }
   }
   if (op.status === 'encerrada' || op.status === 'rejeitada') {
@@ -783,8 +790,10 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
 
   // Derivados
   const minutosDecorridos = operacaoAtiva ? minutosPassados(operacaoAtiva.inicio) : 0
+  const tfRow = resolveTfRow(tfCatalog, timeframe)
+  const tfLinhaMotor = `${timeframe} (motor ${tfRow.canonical})`
   const avaliacaoEntrada = operacaoAtiva
-    ? avaliarEntradaAtrasada(operacaoAtiva, precoAtual, minutosDecorridos)
+    ? avaliarEntradaAtrasada(operacaoAtiva, precoAtual, minutosDecorridos, tfLinhaMotor)
     : null
 
   const ativosFiltrados = ativos.filter(a => {
@@ -812,7 +821,6 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const corDirecao = (d: string) =>
     d === 'COMPRA' ? '#22c55e' : d === 'VENDA' ? '#ef4444' : '#f59e0b'
 
-  const tfRow = resolveTfRow(tfCatalog, timeframe)
   const tfRowsUi = tfCatalog ?? FALLBACK_TF_CATALOG
   return (
     <div className={styles.plataforma} data-platform-root>
@@ -897,19 +905,34 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                 <div className={styles.precoAtual}>
                   R$ {precoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </div>
-                <div style={{ color: parseFloat(variacaoPorc) >= 0 ? '#22c55e' : '#ef4444', fontSize: '0.82rem', fontWeight: 600, marginTop: 2 }}>
-                  {parseFloat(variacaoPorc) >= 0 ? '▲' : '▼'} {Math.abs(parseFloat(variacaoPorc))}% desde a entrada
-                </div>
+                {operacaoAtiva.precoEntrada ? (
+                  <div style={{ color: parseFloat(variacaoPorc) >= 0 ? '#22c55e' : '#ef4444', fontSize: '0.82rem', fontWeight: 600, marginTop: 2 }}>
+                    {parseFloat(variacaoPorc) >= 0 ? '▲' : '▼'} {Math.abs(parseFloat(variacaoPorc))}% desde a entrada
+                  </div>
+                ) : (
+                  <div style={{ color: '#7a7060', fontSize: '0.78rem', fontWeight: 500, marginTop: 2 }}>
+                    Sem preco de referencia de entrada (aguardando motor ou niveis).
+                  </div>
+                )}
               </div>
 
               {/* LINHA DO TEMPO */}
               <div className={styles.linhaDoTempo}>
                 <div className={styles.ldtTitulo}>Linha do Tempo</div>
+                <div className={styles.ldtTfEscopo} title="Mesmo timeframe que o botao ativo no grafico e o enviado ao motor na analise.">
+                  Valido para <strong>{timeframe}</strong>
+                  <span style={{ opacity: 0.85 }}> · motor {tfRow.canonical}</span>
+                </div>
                 <div className={styles.ldtGrid}>
                   <div className={styles.ldtItem}>
-                    <div className={styles.ldtLabel}>Sinal detectado</div>
+                    <div className={styles.ldtLabel}>
+                      {operacaoAtiva.status === 'aguardando' ? 'Janela aberta' : 'Sinal consolidado'}
+                    </div>
                     <div className={styles.ldtValor}>{formatHora(operacaoAtiva.inicio)}</div>
-                    <div className={styles.ldtSub}>{formatData(operacaoAtiva.inicio)}</div>
+                    <div className={styles.ldtSub}>
+                      {formatData(operacaoAtiva.inicio)}
+                      {operacaoAtiva.status === 'aguardando' ? ' · aguardando AEGIS' : ''}
+                    </div>
                   </div>
                   <div className={styles.ldtItem}>
                     <div className={styles.ldtLabel}>Tempo decorrido</div>
@@ -917,7 +940,9 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                       style={{ color: minutosDecorridos > 45 ? '#f59e0b' : '#22c55e' }}>
                       {duracaoTexto(operacaoAtiva.inicio)}
                     </div>
-                    <div className={styles.ldtSub}>em andamento</div>
+                    <div className={styles.ldtSub}>
+                      {operacaoAtiva.status === 'aguardando' ? 'desde selecao TF' : 'em andamento'}
+                    </div>
                   </div>
                   <div className={styles.ldtItem}>
                     <div className={styles.ldtLabel}>Encerramento</div>
@@ -932,30 +957,49 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
               </div>
 
               {/* CAIXA DO ORQUESTRADOR */}
-              {avaliacaoEntrada && (
+              {avaliacaoEntrada && (() => {
+                const consolidando = avaliacaoEntrada.dialogoVariant === 'consolidacao'
+                const borda = consolidando
+                  ? '#38bdf8'
+                  : avaliacaoEntrada.urgencia === 'ok'
+                    ? '#22c55e'
+                    : avaliacaoEntrada.urgencia === 'atencao'
+                      ? '#f59e0b'
+                      : '#ef4444'
+                const fundo = consolidando
+                  ? 'rgba(56,189,248,0.08)'
+                  : avaliacaoEntrada.urgencia === 'ok'
+                    ? 'rgba(34,197,94,0.06)'
+                    : avaliacaoEntrada.urgencia === 'atencao'
+                      ? 'rgba(245,158,11,0.06)'
+                      : 'rgba(239,68,68,0.06)'
+                const titulo = consolidando
+                  ? 'Tucano: consolidando leitura do TF'
+                  : avaliacaoEntrada.urgencia === 'ok'
+                    ? 'Tucano diz: entrada ainda valida'
+                    : avaliacaoEntrada.urgencia === 'atencao'
+                      ? 'Tucano diz: atencao antes de entrar'
+                      : 'Tucano diz: nao recomendado entrar agora'
+                const emoji = consolidando ? '🦉' : avaliacaoEntrada.urgencia === 'ok' ? '🦉' : avaliacaoEntrada.urgencia === 'atencao' ? '⚠️' : '🛑'
+                return (
                 <div className={styles.dialogoOrquestrador}
                   style={{
-                    borderLeftColor:
-                      avaliacaoEntrada.urgencia === 'ok' ? '#22c55e' :
-                      avaliacaoEntrada.urgencia === 'atencao' ? '#f59e0b' : '#ef4444',
-                    background:
-                      avaliacaoEntrada.urgencia === 'ok' ? 'rgba(34,197,94,0.06)' :
-                      avaliacaoEntrada.urgencia === 'atencao' ? 'rgba(245,158,11,0.06)' :
-                      'rgba(239,68,68,0.06)',
+                    borderLeftColor: borda,
+                    background: fundo,
                   }}>
-                  <div className={styles.dialogoEmoji}>
-                    {avaliacaoEntrada.urgencia === 'ok' ? '🦉' :
-                     avaliacaoEntrada.urgencia === 'atencao' ? '⚠️' : '🛑'}
-                  </div>
+                  <div className={styles.dialogoEmoji}>{emoji}</div>
                   <div>
                     <div className={styles.dialogoTitulo}
                       style={{
-                        color: avaliacaoEntrada.urgencia === 'ok' ? '#22c55e' :
-                               avaliacaoEntrada.urgencia === 'atencao' ? '#f59e0b' : '#ef4444',
+                        color: consolidando
+                          ? '#38bdf8'
+                          : avaliacaoEntrada.urgencia === 'ok'
+                            ? '#22c55e'
+                            : avaliacaoEntrada.urgencia === 'atencao'
+                              ? '#f59e0b'
+                              : '#ef4444',
                       }}>
-                      {avaliacaoEntrada.urgencia === 'ok' ? 'Tucano diz: entrada ainda valida' :
-                       avaliacaoEntrada.urgencia === 'atencao' ? 'Tucano diz: atencao antes de entrar' :
-                       'Tucano diz: nao recomendado entrar agora'}
+                      {titulo}
                     </div>
                     <p className={styles.dialogoMensagem}>{avaliacaoEntrada.mensagem}</p>
                     {avaliacaoEntrada.movimentoConsumidoPorc > 0 && (
@@ -975,7 +1019,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                     )}
                   </div>
                 </div>
-              )}
+                )
+              })()}
 
               {/* Motivo */}
               <div className={styles.motivoBloco}>
