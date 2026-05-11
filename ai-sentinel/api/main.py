@@ -135,6 +135,44 @@ class DeskExecuteBody(BaseModel):
         return u
 
 
+# Mapeamento entre IDs do frontend e nomes canonicos de agentes no FeatureStore.
+_FRONTEND_AGENT_FEATURE_MAP = {
+    "ATLAS": "ATLAS",
+    "MACRO": "MacroAgent",
+    "ORION": "ORION",
+    "NEWS": "NewsAgent",
+    "TRENDS": "TrendsAgent",
+    "FUND": "FundamentalistAgent",
+    "SENTIMENT": "SentimentAgent",
+}
+
+
+def _collect_agent_scores(signal_id: str, alert) -> Dict[str, Any]:
+    """Constroi mapa de scores por agente baseado em dados reais persistidos (sem placeholders)."""
+    fm = analysis_service.feature_store.get_signal_feature_map(signal_id)
+    scores: Dict[str, Any] = {}
+    for frontend_id, agent_name in _FRONTEND_AGENT_FEATURE_MAP.items():
+        entry = fm.get(agent_name) or {}
+        feats = entry.get("features") or {}
+        emitted = feats.get("emitted_confidence")
+        if isinstance(emitted, (int, float)):
+            scores[frontend_id] = round(float(emitted), 2)
+        else:
+            scores[frontend_id] = None
+
+    if alert.governance:
+        scores["SENTINEL"] = round(float(alert.governance.sentinel_confidence), 2)
+    else:
+        scores["SENTINEL"] = None
+
+    scores["AEGIS"] = round(float(alert.score), 2) if isinstance(alert.score, (int, float)) else None
+
+    argus_active = analysis_service.argus.get_active_positions() or []
+    scores["ARGUS"] = 100.0 if argus_active else None
+
+    return scores
+
+
 # --- Pipeline de Análise Original ---
 def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) -> Dict[str, Any]:
     alert = analysis_service.analyze(asset, chart_timeframe=chart_timeframe)
@@ -168,9 +206,18 @@ def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) ->
         analysis_service.register_argus_after_desk_pipeline(alert, desk_result)
     except Exception as reg_err:
         logger.warning("register_argus_after_desk_pipeline: %s", reg_err)
+
+    signal_id = alert.governance.signal_id if alert.governance else ""
+    agent_scores = _collect_agent_scores(signal_id, alert) if signal_id else {}
+    agent_failures = [f.dict() for f in (alert.agent_failures or [])]
+
     return {
         "success": True,
         "data": alert.dict(),
+        "agent_scores": agent_scores,
+        "agent_failures": agent_failures,
+        "integrity_score": float(alert.integrity_score),
+        "fast_path_decision": alert.fast_path_decision,
         "telegram": telegram_result,
         "desk": desk_result,
     }

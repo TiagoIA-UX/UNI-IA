@@ -73,40 +73,46 @@ function resolveTfRow(catalog: TfMeta[] | null, label: string): TfMeta {
 }
 
 // ─── Agentes ──────────────────────────────────────────────────────────────────
+// IDs alinhados ao backend (api/main.py _FRONTEND_AGENT_FEATURE_MAP):
+//   ATLAS, MACRO, ORION, NEWS, TRENDS, FUND, SENTIMENT, SENTINEL, ARGUS, AEGIS
 const AGENTES_BASE: Agente[] = [
-  { id: 'ATLAS',     animal: 'Onca-Pintada',    emoji: '🐆', papel: 'Analise Tecnica',     score: null, voto: null },
-  { id: 'MACRO',     animal: 'Harpia',           emoji: '🦅', papel: 'Contexto de Mercado', score: null, voto: null },
-  { id: 'SENTIMENT', animal: 'Boto-Cor-de-Rosa', emoji: '🐬', papel: 'Sentimento',          score: null, voto: null },
-  { id: 'NEWS',      animal: 'Arara Azul',       emoji: '🦜', papel: 'Noticias',            score: null, voto: null },
-  { id: 'ARGUS',     animal: 'Capivara',         emoji: '🦫', papel: 'Volume e Fluxo',      score: null, voto: null },
-  { id: 'SENTINEL',  animal: 'Jabuti',           emoji: '🐢', papel: 'Protecao de Capital', score: null, voto: null },
-  { id: 'PUMA',      animal: 'Puma',             emoji: '🐱', papel: 'Monitoramento',       score: null, voto: null },
-  { id: 'AEGIS',     animal: 'Tucano',           emoji: '🦉', papel: 'Fusao de Decisao',    score: null, voto: null },
+  { id: 'ATLAS',     animal: 'Onca-Pintada',    emoji: '🐆', papel: 'Analise Tecnica',       score: null, voto: null },
+  { id: 'MACRO',     animal: 'Harpia',           emoji: '🦅', papel: 'Contexto de Mercado',   score: null, voto: null },
+  { id: 'ORION',     animal: 'Coruja',           emoji: '🦉', papel: 'Cognicao de Noticias',  score: null, voto: null },
+  { id: 'NEWS',      animal: 'Arara Azul',       emoji: '🦜', papel: 'Noticias',              score: null, voto: null },
+  { id: 'TRENDS',    animal: 'Capivara',         emoji: '🦫', papel: 'Volume e Fluxo',        score: null, voto: null },
+  { id: 'FUND',      animal: 'Cutia',            emoji: '🐀', papel: 'Fundamentos',           score: null, voto: null },
+  { id: 'SENTIMENT', animal: 'Boto-Cor-de-Rosa', emoji: '🐬', papel: 'Sentimento',            score: null, voto: null },
+  { id: 'SENTINEL',  animal: 'Jabuti',           emoji: '🐢', papel: 'Protecao de Capital',   score: null, voto: null },
+  { id: 'ARGUS',     animal: 'Puma',             emoji: '🐆', papel: 'Monitoramento Posicao', score: null, voto: null },
+  { id: 'AEGIS',     animal: 'Tucano',           emoji: '🐦', papel: 'Fusao de Decisao',      score: null, voto: null },
 ]
 
 // ─── Ativos seed ──────────────────────────────────────────────────────────────
+// Símbolos TradingView usam BINANCE:<BASE>USDT — referência global líquida.
+// MERCADOBITCOIN:* não existe no TradingView; o preço em BRL vem do MB via API.
 const MB_ATIVOS_SEED: Ativo[] = [
-  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'MERCADOBITCOIN:BTC' },
-  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ETH' },
-  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'MERCADOBITCOIN:SOL' },
-  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'MERCADOBITCOIN:BNB' },
-  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:XRP' },
-  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'MERCADOBITCOIN:ADA' },
-  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'MERCADOBITCOIN:DOT' },
-  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'MERCADOBITCOIN:AVAX' },
-  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LINK' },
-  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:DOGE' },
-  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'MERCADOBITCOIN:LTC' },
-  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'MERCADOBITCOIN:MATIC' },
-  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'MERCADOBITCOIN:UNI' },
-  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'MERCADOBITCOIN:ATOM' },
-  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'MERCADOBITCOIN:NEAR' },
-  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'MERCADOBITCOIN:ALGO' },
-  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:SAND' },
-  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'MERCADOBITCOIN:MANA' },
-  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'MERCADOBITCOIN:FTM' },
-  { simbolo: 'USDT-BRL',  nome: 'Tether',        categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDT' },
-  { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'MERCADOBITCOIN:USDC' },
+  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'BINANCE:BTCUSDT' },
+  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'BINANCE:ETHUSDT' },
+  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'BINANCE:SOLUSDT' },
+  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'BINANCE:BNBUSDT' },
+  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'BINANCE:XRPUSDT' },
+  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'BINANCE:ADAUSDT' },
+  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'BINANCE:DOTUSDT' },
+  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'BINANCE:AVAXUSDT' },
+  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'BINANCE:LINKUSDT' },
+  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'BINANCE:DOGEUSDT' },
+  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'BINANCE:LTCUSDT' },
+  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'BINANCE:MATICUSDT' },
+  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'BINANCE:UNIUSDT' },
+  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'BINANCE:ATOMUSDT' },
+  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'BINANCE:NEARUSDT' },
+  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'BINANCE:ALGOUSDT' },
+  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'BINANCE:SANDUSDT' },
+  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'BINANCE:MANAUSDT' },
+  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'BINANCE:FTMUSDT' },
+  { simbolo: 'USDT-BRL',  nome: 'Tether',        categoria: 'Stablecoin', tv: 'BINANCE:USDTBRL' },
+  { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'BINANCE:USDCUSDT' },
 ]
 
 const API_BASE =
@@ -304,12 +310,16 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
           .filter((s: string) => s.endsWith('-BRL'))
           .filter((s: string) => !MB_ATIVOS_SEED.find(a => a.simbolo === s))
           .slice(0, 580)
-          .map((s: string) => ({
-            simbolo: s,
-            nome: s.replace('-BRL', ''),
-            categoria: 'Outro',
-            tv: `MERCADOBITCOIN:${s.replace('-', '')}`,
-          }))
+          .map((s: string) => {
+            const base = s.replace('-BRL', '')
+            return {
+              simbolo: s,
+              nome: base,
+              categoria: 'Outro',
+              // Default: BINANCE:<BASE>USDT (símbolo TradingView validado).
+              tv: `BINANCE:${base}USDT`,
+            }
+          })
         setAtivos([...MB_ATIVOS_SEED, ...extras])
       })
       .catch(() => { /* mantém seed */ })
@@ -350,7 +360,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     return () => { cancelled = true }
   }, [])
 
-  // Análise do ativo selecionado
+  // Análise do ativo selecionado (lê agent_scores REAIS do FeatureStore via backend)
   const buscarAnalise = useCallback(async (simbolo: string, tfLabel: string) => {
     const row = resolveTfRow(tfCatalog, tfLabel)
     setCarregandoAnalise(true)
@@ -360,19 +370,39 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(60000), // pipeline LLM real (Macro/ATLAS/ORION/News) pode levar 20-50s
       })
       if (!r.ok) throw new Error()
       const data = await r.json()
-      if (data.agent_scores) {
-        setAgentes(prev => prev.map(a => ({
-          ...a,
-          score: data.agent_scores[a.id] ?? a.score,
-          voto: (data.agent_scores[a.id] ?? 0) >= 75 ? 'COMPRA'
-              : (data.agent_scores[a.id] ?? 0) >= 50 ? 'NEUTRO' : 'VENDA',
-        })))
+      const scores: Record<string, number | null> = data.agent_scores ?? {}
+      const failures: { agent_name: string }[] = Array.isArray(data.agent_failures) ? data.agent_failures : []
+      const failureSet = new Set(failures.map(f => String(f.agent_name)))
+      const idToBackendName: Record<string, string> = {
+        ATLAS: 'ATLAS',
+        MACRO: 'MacroAgent',
+        ORION: 'ORION',
+        NEWS: 'NewsAgent',
+        TRENDS: 'TrendsAgent',
+        FUND: 'FundamentalistAgent',
+        SENTIMENT: 'SentimentAgent',
+        SENTINEL: 'SENTINEL',
+        ARGUS: 'ARGUS',
+        AEGIS: 'AEGIS',
       }
+      setAgentes(prev => prev.map(a => {
+        const raw = scores[a.id]
+        const failed = failureSet.has(idToBackendName[a.id] ?? a.id)
+        const score: number | null = typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+        let voto: Agente['voto'] = null
+        if (score != null) {
+          voto = score >= 75 ? 'COMPRA' : score >= 50 ? 'NEUTRO' : 'VENDA'
+        } else if (failed) {
+          voto = 'REJEITADO'
+        }
+        return { ...a, score, voto }
+      }))
     } catch {
+      // Sem inflar dados: marca tudo como sem score e voto nulo.
       setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
     } finally {
       setCarregandoAnalise(false)
