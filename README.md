@@ -29,7 +29,7 @@ pip install -r requirements.txt
 python run_local_api.py
 
 # 4. Frontend (novo terminal)
-cd zairyx-blog
+cd zairyx-frontend
 npm install
 npm run dev
 
@@ -228,12 +228,13 @@ python run_local_api.py
 # → http://127.0.0.1:8000
 
 # Frontend (novo terminal)
-cd zairyx-blog
+cd zairyx-frontend
 npm install
 npm run dev
 # → http://localhost:3000
 ```
 Comandos Telegram admin: `/status` · `/pending` · `/approve <id>` · `/reject <id>` · `/cycle`
 Deploy Vercel
-Root Directory: `zairyx-blog`
+Root Directory: `zairyx-frontend`
 Erro `Build Canceled` (unverified commit): crie branch → PR → merge pelo GitHub → commit sai como `Verified`
+
