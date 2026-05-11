@@ -213,10 +213,10 @@ function avaliarEntradaAtrasada(
 }
 
 // ─── TradingView via iframe (único método confiável no Next.js 2025/2026) ──────
-// Gráfico limpo: sem indicadores injetados (RSI/Volume/MACD/BB). O usuário
-// pode adicionar via "Indicators" do próprio widget se quiser. Os indicadores
-// que o motor consome continuam computados no backend (ATLAS) — não precisam
-// poluir o gráfico aqui.
+// Gráfico 100% limpo: ZERO indicadores. Apenas candles e volume integrado do TV.
+// O usuário pode adicionar via "Indicators" do próprio widget se quiser. Os
+// indicadores que o motor consome são computados no backend (ATLAS) e não
+// poluem a visualização aqui.
 function TradingViewChart({ simboloTV, interval }: { simboloTV: string; interval: string }) {
   const src =
     `https://www.tradingview.com/widgetembed/` +
@@ -227,8 +227,13 @@ function TradingViewChart({ simboloTV, interval }: { simboloTV: string; interval
     `&locale=pt` +
     `&timezone=America%2FSao_Paulo` +
     `&hide_top_toolbar=0` +
-    `&hide_legend=0` +
+    `&hide_legend=1` +
     `&hide_side_toolbar=1` +
+    `&withdateranges=0` +
+    `&details=0` +
+    `&hotlist=0` +
+    `&calendar=0` +
+    `&studies=[]` +
     `&backgroundColor=rgba(7%2C9%2C10%2C1)`
 
   return (
@@ -259,12 +264,16 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const [toast, setToast] = useState<{ msg: string; cor: string } | null>(null)
   const [now, setNow] = useState(new Date())
   const [carregandoAnalise, setCarregandoAnalise] = useState(false)
+  /** Timestamp em ms quando a análise atual começou (para contador "analisando há Xs"). */
+  const [analiseIniciadaEm, setAnaliseIniciadaEm] = useState<number | null>(null)
   /** Erro real da última análise (rede, pipeline bloqueado, etc.). Mostrado na UI. */
   const [analiseErro, setAnaliseErro] = useState<string | null>(null)
   /** Score de integridade real (0-100) — quantos agentes retornaram dados. */
   const [integrityScore, setIntegrityScore] = useState<number | null>(null)
   /** Falhas reais do pipeline (agente -> tipo de erro). */
   const [agentFailures, setAgentFailures] = useState<{ agent_name: string; error_type: string; error_message: string }[]>([])
+  /** AbortController da análise atual (cancela quando muda ativo/TF ou desmonta). */
+  const analiseAbortRef = useRef<AbortController | null>(null)
   const [abaEsquerda, setAbaEsquerda] = useState<'operacao' | 'ativos'>('operacao')
   /** Drawer dos Guardiões (direita) colapsável para maximizar o gráfico. Default ABERTO. */
   const [guardioesAbertos, setGuardioesAbertos] = useState(true)
@@ -382,18 +391,37 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     return () => { cancelled = true }
   }, [])
 
-  // Análise do ativo selecionado (lê agent_scores REAIS do FeatureStore via backend)
+  // Análise do ativo selecionado (lê agent_scores REAIS do FeatureStore via backend).
+  // Usa AbortController para cancelar chamadas anteriores quando muda ativo/TF.
   const buscarAnalise = useCallback(async (simbolo: string, tfLabel: string) => {
+    // Cancela chamada anterior em curso (sem deixar pendurada).
+    if (analiseAbortRef.current) {
+      try { analiseAbortRef.current.abort('superseded') } catch { /* ignora */ }
+    }
+    const ctrl = new AbortController()
+    analiseAbortRef.current = ctrl
+
     const row = resolveTfRow(tfCatalog, tfLabel)
+    const assetParam = simbolo.replace('-BRL', '') + 'BRL'
+    const startedAt = Date.now()
+
     setCarregandoAnalise(true)
+    setAnaliseIniciadaEm(startedAt)
     setAnaliseErro(null)
+
+    // Timeout fallback (60s) — aborta se o servidor não responder.
+    const timeoutId = setTimeout(() => {
+      try { ctrl.abort('timeout') } catch { /* ignora */ }
+    }, 60000)
+
+    console.info('[Boitata] analyze REQUEST', { asset: assetParam, tf: row.canonical, url: `${API_BASE}/api/analyze/${assetParam}` })
+
     try {
-      const assetParam = simbolo.replace('-BRL', '') + 'BRL'
       const r = await fetch(`${API_BASE}/api/analyze/${assetParam}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
-        signal: AbortSignal.timeout(60000), // pipeline LLM real (Macro/ATLAS/ORION/News) pode levar 20-50s
+        signal: ctrl.signal,
       })
       if (!r.ok) {
         let detail = `HTTP ${r.status}`
@@ -404,10 +432,20 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         throw new Error(detail)
       }
       const data = await r.json()
+      console.info('[Boitata] analyze RESPONSE', { ms: Date.now() - startedAt, agent_scores: data.agent_scores, integrity_score: data.integrity_score, agent_failures: data.agent_failures })
+
       const scores: Record<string, number | null> = data.agent_scores ?? {}
       const failures: { agent_name: string; error_type: string; error_message: string }[] =
         Array.isArray(data.agent_failures) ? data.agent_failures : []
       const integ = typeof data.integrity_score === 'number' ? data.integrity_score : null
+
+      // Detectar backend desatualizado (sem agent_scores ainda) e avisar.
+      if (!data.agent_scores) {
+        setAnaliseErro(
+          'Backend desatualizado: nao retornou agent_scores. Reinicie o ai-sentinel (uvicorn) para pegar o commit mais recente.'
+        )
+      }
+
       const failureSet = new Set(failures.map(f => String(f.agent_name)))
       const idToBackendName: Record<string, string> = {
         ATLAS: 'ATLAS',
@@ -436,26 +474,55 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       setAgentFailures(failures)
       setIntegrityScore(integ)
     } catch (err) {
+      const aborted = err instanceof Error && /abort/i.test(String(err.message ?? err.name ?? ''))
+      if (aborted && ctrl.signal.reason === 'superseded') {
+        console.info('[Boitata] analyze ABORTED (superseded por nova chamada)')
+        return
+      }
       const msg = err instanceof Error ? err.message : 'falha desconhecida'
-      // Diagnóstico claro para o utilizador, em vez de "aguardando" eterno.
-      const friendly = /aborted|timeout/i.test(msg)
-        ? `Tempo esgotado (>60s). O servidor pode estar processando ou indisponivel em ${API_BASE}.`
+      const friendly = aborted
+        ? `Tempo esgotado (>60s). O servidor pode estar processando, sobrecarregado ou indisponivel em ${API_BASE}.`
         : /Failed to fetch|network|TypeError/i.test(msg)
           ? `Servidor de analise offline em ${API_BASE}. Verifique que o ai-sentinel esta rodando.`
           : msg
+      console.warn('[Boitata] analyze ERROR', { ms: Date.now() - startedAt, msg, friendly })
       setAnaliseErro(friendly)
       setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
       setAgentFailures([])
       setIntegrityScore(null)
     } finally {
-      setCarregandoAnalise(false)
+      clearTimeout(timeoutId)
+      // Só desliga o "carregando" se essa chamada ainda for a atual (não foi superseded).
+      if (analiseAbortRef.current === ctrl) {
+        analiseAbortRef.current = null
+        setCarregandoAnalise(false)
+        setAnaliseIniciadaEm(null)
+      }
     }
   }, [tfCatalog])
 
   useEffect(() => {
-    buscarAnalise(ativoSelecionado.simbolo, timeframe)
-    const id = setInterval(() => buscarAnalise(ativoSelecionado.simbolo, timeframe), 60000)
-    return () => clearInterval(id)
+    let cancelled = false
+    let nextTimer: ReturnType<typeof setTimeout> | null = null
+
+    // Agendamento recursivo: só agenda a próxima quando a atual TERMINA.
+    // Garante que nunca há duas chamadas concorrentes (que causariam loops sobrepostos).
+    const loop = async () => {
+      if (cancelled) return
+      await buscarAnalise(ativoSelecionado.simbolo, timeframe)
+      if (cancelled) return
+      nextTimer = setTimeout(loop, 60_000)
+    }
+
+    loop()
+
+    return () => {
+      cancelled = true
+      if (nextTimer) clearTimeout(nextTimer)
+      if (analiseAbortRef.current) {
+        try { analiseAbortRef.current.abort('unmount') } catch { /* ignora */ }
+      }
+    }
   }, [ativoSelecionado.simbolo, timeframe, buscarAnalise])
 
   // ── Ranking: taxa de acerto histórica (quando existir) + score ao vivo; prioridade = acerto depois score
@@ -1020,7 +1087,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
               <>
                 <span className={styles.agentesTitulo}>Guardioes Boitata</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {carregandoAnalise && <span className={styles.analisandoChip}>Analisando...</span>}
+                  {carregandoAnalise && (
+                    <span className={styles.analisandoChip}>
+                      {analiseIniciadaEm
+                        ? `analisando ${Math.max(0, Math.floor((now.getTime() - analiseIniciadaEm) / 1000))}s / 60s`
+                        : 'analisando...'}
+                    </span>
+                  )}
                   {scoreFinal !== null ? (
                     <span style={{ fontSize: '1rem', fontWeight: 700, color: corScore(scoreFinal) }}>
                       {scoreFinal}/100
