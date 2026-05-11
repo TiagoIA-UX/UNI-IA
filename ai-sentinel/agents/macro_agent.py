@@ -67,11 +67,15 @@ class MacroAgent:
         market_stats += f"Volume Recente: {payload.get('recent_volume', 'Desconhecido')}\n"
         return market_stats
 
-    def analyze_macro_context(self, asset: str, signal_id: Optional[str] = None) -> AgentSignal:
+    def analyze_macro_context(
+        self, asset: str, signal_id: Optional[str] = None, strategy_legenda: Optional[str] = None
+    ) -> AgentSignal:
         market_features = self.fetch_real_market_data(asset)
         real_data = self._format_market_data(market_features)
         
         prompt = f"Avalie a variação percentual de mercado HOJE (Agors) para o ativo {asset} com base nos dados brutos reais de tela:\n{real_data}"
+        if strategy_legenda:
+            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         

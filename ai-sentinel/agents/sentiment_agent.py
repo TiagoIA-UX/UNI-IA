@@ -20,8 +20,16 @@ class SentimentAgent:
         }
         """
 
-    def analyze_sentiment(self, asset: str, news_data: str, signal_id: Optional[str] = None) -> AgentSignal:
+    def analyze_sentiment(
+        self,
+        asset: str,
+        news_data: str,
+        signal_id: Optional[str] = None,
+        strategy_legenda: Optional[str] = None,
+    ) -> AgentSignal:
         prompt = f"Faça análise de sentimento das notícias extraídas da web hoje para o ativo {asset}:\n{news_data}"
+        if strategy_legenda:
+            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         

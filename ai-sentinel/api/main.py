@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 
 from fastapi import Body, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import uvicorn
 from dotenv import load_dotenv
 
@@ -19,6 +19,9 @@ from api.desk import PrivateDesk
 from api.signal_scanner import SignalScanner
 from api.security import require_admin_token
 from core.chart_timeframes import normalize_chart_timeframe, public_timeframes_catalog
+from core.daily_ops_report import DailyOpsReportService
+from core.kill_switch import KillSwitchService
+from core.system_state import SystemStateManager, UniIAMode
 
 # Configuração de Logging para Monitoramento Proativo
 logging.basicConfig(
@@ -60,13 +63,21 @@ app.add_middleware(
 
 # --- Inicialização de Singletons ---
 try:
+    _mode_raw = (_os.getenv("UNI_IA_MODE", "paper") or "paper").strip().lower()
+    try:
+        system_state = SystemStateManager(UniIAMode(_mode_raw))
+    except ValueError:
+        system_state = SystemStateManager(UniIAMode.PAPER)
+
     telegram_bot = UniIATelegramBot()
     audit_service = AuditService()
     copy_trade_service = CopyTradeService()
     private_desk = PrivateDesk(copy_trade_service, audit_service)
-    analysis_service = AnalysisService()
+    analysis_service = AnalysisService(system_state=system_state)
     signal_scanner = SignalScanner(analysis_service, telegram_bot, private_desk, audit_service)
     telegram_control = TelegramControlService(telegram_bot, private_desk, signal_scanner, copy_trade_service)
+    kill_switch_service = KillSwitchService()
+    daily_ops_service = DailyOpsReportService()
     logger.info("Todos os serviços integrados com sucesso.")
 except Exception as init_err:
     logger.error(f"Falha crítica na inicialização dos serviços: {init_err}")
@@ -89,10 +100,11 @@ class OperationRequest(BaseModel):
     price: float = Field(..., gt=0, description="Preço de execução")
     side: str = Field(..., description="Lado da operação: BUY ou SELL")
 
-    @validator('side')
-    def validate_side(cls, v):
-        if v.upper() not in ('BUY', 'SELL'):
-            raise ValueError('O lado deve ser BUY ou SELL')
+    @field_validator("side")
+    @classmethod
+    def validate_side(cls, v: str) -> str:
+        if v.upper() not in ("BUY", "SELL"):
+            raise ValueError("O lado deve ser BUY ou SELL")
         return v.upper()
 
 
@@ -106,15 +118,17 @@ class DeskExecuteBody(BaseModel):
     chart_timeframe: Optional[str] = Field(None, description="Timeframe canónico da UI (GET /api/meta/chart-timeframes)")
     auto_mode_context: Optional[bool] = Field(None, description="Se o utilizador tinha modo automático ligado na UI")
 
-    @validator("asset")
-    def strip_asset(cls, v):
+    @field_validator("asset")
+    @classmethod
+    def strip_asset(cls, v: str) -> str:
         s = (v or "").strip()
         if not s:
             raise ValueError("asset obrigatorio")
         return s
 
-    @validator("side")
-    def normalize_side(cls, v):
+    @field_validator("side")
+    @classmethod
+    def normalize_side(cls, v: str) -> str:
         u = (v or "").strip().upper()
         if u not in ("BUY", "SELL", "COMPRA", "VENDA"):
             raise ValueError("side deve ser BUY, SELL, COMPRA ou VENDA")
@@ -176,20 +190,199 @@ async def shutdown_signal_scanner():
 
 # --- ESG removido — reservado para fase futura ---
 
+# --- Readiness / Operational reports -----------------------------------------
+
+_READINESS_SEVERITY_ORDER = {"info": 0, "warning": 1, "critical": 2}
+
+
+def _audit_table_validated() -> bool:
+    table = (_os.getenv("AUDIT_TABLE_NAME", "") or "").strip()
+    if not table:
+        return False
+    if table not in AuditService.SUPPORTED_AUDIT_TABLES:
+        return False
+    if table == "uni_ia_events":
+        variant = (_os.getenv("AUDIT_EVENT_VARIANT", "A") or "A").strip().upper()
+        if variant not in {"A", "B"}:
+            return False
+    return True
+
+
+def _collect_readiness_matrix() -> Dict[str, Any]:
+    """Constroi a matriz de readiness operacional usada por /api/health/ready e /api/reports/ops-summary."""
+    audit_table = (_os.getenv("AUDIT_TABLE_NAME", "") or "").strip()
+    audit_validated = _audit_table_validated()
+    audit_supabase_ready = audit_service.is_ready()
+    audit_ready = audit_validated and audit_supabase_ready
+
+    telegram_control_state = telegram_control.status()
+    telegram_control_enabled = bool(telegram_control_state.get("enabled"))
+    telegram_control_configured = bool(telegram_control_state.get("configured"))
+    telegram_ready = (not telegram_control_enabled) or telegram_control_configured
+
+    telegram_dispatch_ready = telegram_bot.configured()
+
+    desk_state = private_desk.status()
+    desk_store_ready = bool(desk_state.get("persistence_ready"))
+
+    copy_trade_state = copy_trade_service.status()
+    scanner_state = signal_scanner.status()
+
+    checks: Dict[str, bool] = {
+        "audit_ready": audit_ready,
+        "telegram_ready": telegram_ready,
+        "telegram_dispatch_ready": telegram_dispatch_ready,
+        "desk_store_ready": desk_store_ready,
+    }
+
+    reason_details: List[Dict[str, str]] = []
+    if not audit_ready:
+        reason_details.append({"check": "audit_ready", "reason": "audit_not_ready", "severity": "critical"})
+    if not telegram_ready:
+        reason_details.append({"check": "telegram_ready", "reason": "telegram_control_not_ready", "severity": "warning"})
+    if not telegram_dispatch_ready:
+        reason_details.append({"check": "telegram_dispatch_ready", "reason": "telegram_dispatch_not_ready", "severity": "warning"})
+    if not desk_store_ready:
+        reason_details.append({"check": "desk_store_ready", "reason": "desk_store_not_ready", "severity": "critical"})
+
+    failed_checks = [item["check"] for item in reason_details]
+    reasons = [item["reason"] for item in reason_details]
+
+    overall_severity = "info"
+    for item in reason_details:
+        if _READINESS_SEVERITY_ORDER[item["severity"]] > _READINESS_SEVERITY_ORDER[overall_severity]:
+            overall_severity = item["severity"]
+
+    return {
+        "ready": not failed_checks,
+        "checks": checks,
+        "failed_checks": failed_checks,
+        "reasons": reasons,
+        "reason_details": reason_details,
+        "overall_severity": overall_severity,
+        "system": system_state.snapshot(),
+        "scanner": scanner_state,
+        "telegram": {
+            "control": telegram_control_state,
+            "dispatch_configured": telegram_dispatch_ready,
+            "ready": telegram_ready,
+        },
+        "copy_trade": copy_trade_state,
+        "desk": desk_state,
+        "risk": kill_switch_service.get_status(
+            outcome_tracker=analysis_service.outcome_tracker,
+            system_state=system_state,
+        ),
+        "audit": {
+            "table": audit_table,
+            "validated": audit_validated,
+            "supabase_ready": audit_supabase_ready,
+        },
+    }
+
+
+@app.get("/api/health/ready", tags=["Monitoramento"])
+def health_readiness(_: None = Depends(require_admin_token)):
+    """Matriz de readiness para producao (audit, telegram, desk_store, etc.)."""
+    try:
+        return {"success": True, "data": _collect_readiness_matrix()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("health_readiness")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/reports/ops-summary", tags=["Monitoramento"])
+def reports_ops_summary(
+    date: Optional[str] = None,
+    risk_events_limit: int = 5,
+    dispatch_window_minutes: int = 1440,
+    dispatch_sample_limit: int = 5000,
+    _: None = Depends(require_admin_token),
+):
+    """Resumo operacional consolidado: daily report + risk + dispatch + readiness."""
+    from datetime import date as _date_cls
+    from datetime import datetime as _dt_cls
+
+    report_date: Optional[_date_cls] = None
+    if date:
+        try:
+            report_date = _dt_cls.strptime(str(date), "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date_invalido (use YYYY-MM-DD)")
+
+    try:
+        daily_report = daily_ops_service.generate_daily_report(report_date=report_date)
+    except RuntimeError as e:
+        daily_report = {
+            "success": False,
+            "error": str(e),
+            "totals": {},
+            "by_asset": {},
+        }
+
+    try:
+        risk_status = kill_switch_service.get_status(
+            outcome_tracker=analysis_service.outcome_tracker,
+            system_state=system_state,
+        )
+    except Exception as e:
+        risk_status = {"enabled": kill_switch_service.enabled, "error": str(e)}
+
+    risk_recent = kill_switch_service.get_recent_events(limit=int(risk_events_limit or 0))
+
+    dispatch_metrics = {
+        "window_minutes": int(dispatch_window_minutes),
+        "sample_limit": int(dispatch_sample_limit),
+        "totals": daily_report.get("totals", {}),
+        "top_reasons_block": daily_report.get("top_reasons_block", []),
+        "by_asset": daily_report.get("by_asset", {}),
+        "source": daily_report.get("source", {}),
+    }
+
+    readiness = _collect_readiness_matrix()
+    strict_readiness = readiness["overall_severity"] == "info"
+
+    return {
+        "success": True,
+        "data": {
+            "daily_report": daily_report,
+            "risk_status": risk_status,
+            "risk_recent_events": risk_recent,
+            "dispatch_metrics": dispatch_metrics,
+            "system": readiness["system"],
+            "desk": readiness["desk"],
+            "copy_trade": readiness["copy_trade"],
+            "scanner": readiness["scanner"],
+            "strict_readiness": strict_readiness,
+            "checks": readiness["checks"],
+            "failed_checks": readiness["failed_checks"],
+            "reasons": readiness["reasons"],
+            "reason_details": readiness["reason_details"],
+            "overall_severity": readiness["overall_severity"],
+            "readiness": {
+                "ready": readiness["ready"],
+                "checks": readiness["checks"],
+                "failed_checks": readiness["failed_checks"],
+                "reasons": readiness["reasons"],
+                "reason_details": readiness["reason_details"],
+                "overall_severity": readiness["overall_severity"],
+            },
+        },
+    }
+
+
 @app.get("/api/signals/status", tags=["Monitoramento"])
 def signals_status():
-    """Status consolidado dos Guardiões."""
+    """Status consolidado do scanner (sem scores sinteticos: so estado real)."""
     try:
         real_status = signal_scanner.status()
-        if not real_status or "scores" not in real_status:
-            return {
-                "success": True,
-                "scores": {
-                    "AEGIS": 92, "SENTINEL": 88, "ATLAS": 75, "ORION": 82,
-                    "MACRO": 65, "NEWS": 70, "SENTIMENT": 78, "ARGUS": 95
-                }
-            }
+        if not real_status:
+            raise HTTPException(status_code=503, detail="scanner_status_indisponivel")
         return {"success": True, "data": real_status}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

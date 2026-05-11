@@ -151,10 +151,10 @@ _ALIASES: Dict[str, str] = {
 
 # Periodos yfinance por intervalo (ATLAS) — conservadores para evitar erro de API.
 YF_HISTORY_CONFIG: Dict[str, tuple[str, str]] = {
-    "1m": ("1m", "5d"),
-    "2m": ("2m", "5d"),
-    "5m": ("5m", "10d"),
-    "15m": ("15m", "15d"),
+    "1m": ("1m", "3d"),
+    "2m": ("2m", "3d"),
+    "5m": ("5m", "7d"),
+    "15m": ("15m", "12d"),
     "30m": ("30m", "30d"),
     "1h": ("1h", "60d"),
     "90m": ("90m", "60d"),
@@ -200,3 +200,112 @@ def normalize_chart_timeframe(raw: Optional[str]) -> Optional[str]:
 
 def yf_interval_period(canonical: str) -> Optional[tuple[str, str]]:
     return YF_HISTORY_CONFIG.get(canonical)
+
+
+_ROW_BY_CANON: Dict[str, Dict[str, Any]] = {str(r["canonical"]): r for r in _TIMEFRAME_ROWS}
+
+# Pesos base AEGIS (soma 1.0) alinhados ao default historico do agente.
+DEFAULT_AEGIS_WEIGHTS: Dict[str, float] = {
+    "ATLAS": 0.30,
+    "ORION": 0.20,
+    "MacroAgent": 0.15,
+    "NewsAgent": 0.10,
+    "TrendsAgent": 0.10,
+    "FundamentalistAgent": 0.10,
+    "SentimentAgent": 0.05,
+}
+
+_AEGIS_BY_STRATEGY_FAMILY: Dict[str, Dict[str, float]] = {
+    "intraday_swings": {
+        "ATLAS": 0.34,
+        "ORION": 0.22,
+        "MacroAgent": 0.12,
+        "NewsAgent": 0.08,
+        "TrendsAgent": 0.16,
+        "FundamentalistAgent": 0.04,
+        "SentimentAgent": 0.04,
+    },
+    "swing_intraday_htf": {
+        "ATLAS": 0.30,
+        "ORION": 0.20,
+        "MacroAgent": 0.16,
+        "NewsAgent": 0.10,
+        "TrendsAgent": 0.12,
+        "FundamentalistAgent": 0.08,
+        "SentimentAgent": 0.04,
+    },
+    "swing_htf": {
+        "ATLAS": 0.26,
+        "ORION": 0.18,
+        "MacroAgent": 0.20,
+        "NewsAgent": 0.12,
+        "TrendsAgent": 0.10,
+        "FundamentalistAgent": 0.10,
+        "SentimentAgent": 0.04,
+    },
+    "position_gap_session": {
+        "ATLAS": 0.24,
+        "ORION": 0.16,
+        "MacroAgent": 0.18,
+        "NewsAgent": 0.12,
+        "TrendsAgent": 0.12,
+        "FundamentalistAgent": 0.14,
+        "SentimentAgent": 0.04,
+    },
+    "macro_position": {
+        "ATLAS": 0.20,
+        "ORION": 0.14,
+        "MacroAgent": 0.24,
+        "NewsAgent": 0.12,
+        "TrendsAgent": 0.08,
+        "FundamentalistAgent": 0.18,
+        "SentimentAgent": 0.04,
+    },
+}
+
+
+def _assert_unit_weights(weights: Dict[str, float], label: str) -> None:
+    total = sum(weights.values())
+    if abs(total - 1.0) > 1e-6:
+        raise RuntimeError(f"pesos AEGIS invalidos em {label}: soma={total}")
+
+
+_assert_unit_weights(DEFAULT_AEGIS_WEIGHTS, "DEFAULT_AEGIS_WEIGHTS")
+for _fam, _w in _AEGIS_BY_STRATEGY_FAMILY.items():
+    _assert_unit_weights(_w, _fam)
+
+
+def timeframe_strategy_legenda(canonical: Optional[str]) -> str:
+    """Texto curto para injetar nos prompts dos agentes (alinhamento por TF)."""
+    if not canonical:
+        return (
+            "Timeframe operacional: nao especificado. Trate como contexto neutro; "
+            "nao assuma scalping nem posicao longa; priorize confluencia ATLAS/ORION com conservadorismo."
+        )
+    row = _ROW_BY_CANON.get(canonical)
+    if not row:
+        return (
+            f"Timeframe operacional canonico desconhecido: {canonical!r}. "
+            "Nao invente dados; alinhe o raciocinio ao que o vetor de features suporta."
+        )
+    parts = [
+        f"Timeframe operacional do cliente: {row['label']} ({canonical}).",
+        f"Familia de estrategia: {row.get('strategy_family', '')}.",
+        f"Dica pratica: {row.get('hint', '')}.",
+        f"Alinhamento multi-agente esperado: {row.get('agent_alignment', '')}.",
+    ]
+    note = row.get("strategy_family_note")
+    if note:
+        parts.append(str(note))
+    return " ".join(parts)
+
+
+def aegis_base_weights_for_chart_timeframe(canonical: Optional[str]) -> Dict[str, float]:
+    """Pesos base AEGIS conforme familia de estrategia do timeframe canonico."""
+    if not canonical or canonical not in _ROW_BY_CANON:
+        return dict(DEFAULT_AEGIS_WEIGHTS)
+    fam = str(_ROW_BY_CANON[canonical].get("strategy_family") or "")
+    tpl = _AEGIS_BY_STRATEGY_FAMILY.get(fam)
+    if not tpl:
+        return dict(DEFAULT_AEGIS_WEIGHTS)
+    return dict(tpl)

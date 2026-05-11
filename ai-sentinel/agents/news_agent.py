@@ -51,10 +51,12 @@ class NewsAgent:
             "has_publication_date": bool(pub_dates),
         }
 
-    def analyze_news(self, asset: str, signal_id: Optional[str] = None) -> AgentSignal:
+    def analyze_news(self, asset: str, signal_id: Optional[str] = None, strategy_legenda: Optional[str] = None) -> AgentSignal:
         news_data = self.fetch_real_news(asset)
         raw_news = news_data["raw_text"]
         prompt = f"Analise as seguintes NOTÍCIAS REAIS de hoje para o ativo {asset}:\n{raw_news}"
+        if strategy_legenda:
+            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         

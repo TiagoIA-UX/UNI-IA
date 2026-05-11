@@ -12,6 +12,12 @@ Diferenca do antigo StrategyEngine:
 import os
 from typing import Any, Dict, List, Optional
 
+from core.chart_timeframes import (
+    DEFAULT_AEGIS_WEIGHTS,
+    aegis_base_weights_for_chart_timeframe,
+    normalize_chart_timeframe,
+    timeframe_strategy_legenda,
+)
 from core.contract_validation import (
     normalize_classification,
     normalize_confluence_level,
@@ -41,16 +47,8 @@ class AegisAgent:
         self.llm = GroqClient()
         self.default_mode = os.getenv("STRATEGY_DEFAULT_MODE", "swing").lower()
 
-        # Pesos base — recalibraveis
-        self._base_weights = {
-            "ATLAS": 0.30,
-            "ORION": 0.20,
-            "MacroAgent": 0.15,
-            "NewsAgent": 0.10,
-            "TrendsAgent": 0.10,
-            "FundamentalistAgent": 0.10,
-            "SentimentAgent": 0.05,
-        }
+        # Pesos base default (timeframe None / desconhecido); por TF ver aegis_base_weights_for_chart_timeframe.
+        self._base_weights = dict(DEFAULT_AEGIS_WEIGHTS)
 
         self.system_prompt = """Voce e o AEGIS, agente de fusao do Zairyx IA.
 Voce recebe sinais dos agentes ATLAS (estrutural) e ORION (narrativo),
@@ -77,9 +75,14 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     # Dynamic weight recalibration
     # ------------------------------------------------------------------
 
-    def _get_effective_weights(self, regime_context: Optional[RegimeContext] = None) -> Dict[str, float]:
+    def _get_effective_weights(
+        self,
+        regime_context: Optional[RegimeContext] = None,
+        chart_timeframe: Optional[str] = None,
+    ) -> Dict[str, float]:
         """Recalibra pesos baseado em performance real dos ultimos 30 dias."""
-        weights = dict(self._base_weights)
+        tf = normalize_chart_timeframe(chart_timeframe) if chart_timeframe else None
+        weights = dict(aegis_base_weights_for_chart_timeframe(tf))
 
         try:
             perf = self.outcome_tracker.compute_performance(window_days=30)
@@ -158,7 +161,7 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         chart_timeframe: Optional[str] = None,
     ) -> OpportunityAlert:
         """Fusao ponderada dos sinais dos agentes."""
-        weights = self._get_effective_weights(regime_context=regime_context)
+        weights = self._get_effective_weights(regime_context=regime_context, chart_timeframe=chart_timeframe)
 
         # Compute weighted bias
         weighted_bias = 0.0
@@ -223,6 +226,10 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         )
         for name, info in agent_summary.items():
             prompt += f"  {name}: {info['signal_type']} (conf={info['confidence']}, peso={info['weight']}, contrib={info['contribution']})\n"
+
+        tf_for_legenda = normalize_chart_timeframe(chart_timeframe) if chart_timeframe else None
+        legenda = timeframe_strategy_legenda(tf_for_legenda)
+        prompt = f"[Contexto por timeframe — AEGIS]\n{legenda}\n\n{prompt}"
 
         response = self.llm.generate_response(self.system_prompt, prompt)
         data = extract_json_object(response)

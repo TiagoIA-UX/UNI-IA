@@ -18,6 +18,7 @@ nunca para gerar os numeros.
 """
 
 import math
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional
 
 import yfinance as yf
@@ -81,10 +82,13 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         ticker_str = self._get_ticker(asset)
         ticker = yf.Ticker(ticker_str)
 
-        # Multi-timeframe data
-        hist_1d = ticker.history(period="3mo", interval="1d")
-        hist_1h = ticker.history(period="5d", interval="1h")
-        hist_15m = ticker.history(period="5d", interval="15m")
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            fut_1d = pool.submit(lambda: ticker.history(period="3mo", interval="1d"))
+            fut_1h = pool.submit(lambda: ticker.history(period="5d", interval="1h"))
+            fut_15m = pool.submit(lambda: ticker.history(period="5d", interval="15m"))
+            hist_1d = fut_1d.result()
+            hist_1h = fut_1h.result()
+            hist_15m = fut_15m.result()
 
         if hist_1d.empty or len(hist_1d) < 20:
             raise ValueError(f"Dados insuficientes para ATLAS computar features de {asset}.")
@@ -132,17 +136,14 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         # Gap sessao D1: abertura vs fecho anterior (sincrono; PTAX async fica em core/gap_filter)
         features["daily_session_gap_pct"] = None
         features["daily_gap_atr_ratio"] = None
-        try:
-            if "Open" in hist_1d.columns and len(close_1d) >= 2:
-                o_last = float(hist_1d["Open"].values[-1])
-                prev_c = float(close_1d[-2])
-                if prev_c != 0:
-                    features["daily_session_gap_pct"] = _safe((o_last - prev_c) / prev_c * 100.0, 4)
-                atr14 = features.get("atr_14_1d")
-                if atr14 is not None and float(atr14) > 0:
-                    features["daily_gap_atr_ratio"] = _safe(abs(o_last - prev_c) / float(atr14), 4)
-        except Exception:
-            pass
+        if "Open" in hist_1d.columns and len(close_1d) >= 2:
+            o_last = float(hist_1d["Open"].values[-1])
+            prev_c = float(close_1d[-2])
+            if prev_c != 0 and math.isfinite(o_last) and math.isfinite(prev_c):
+                features["daily_session_gap_pct"] = _safe((o_last - prev_c) / prev_c * 100.0, 4)
+            atr14 = features.get("atr_14_1d")
+            if atr14 is not None and float(atr14) > 0 and math.isfinite(o_last) and math.isfinite(prev_c):
+                features["daily_gap_atr_ratio"] = _safe(abs(o_last - prev_c) / float(atr14), 4)
 
         # --- ATR Regime (low / normal / high / extreme) ---
         if features["atr_14_1d_pct"] is not None:
@@ -331,13 +332,10 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             return
 
         interval, period = pair
-        try:
-            hist = ticker.history(period=period, interval=interval)
-        except Exception:
-            hist = None  # type: ignore[assignment]
+        hist = ticker.history(period=period, interval=interval)
 
-        min_bars = 10 if chart_tf in ("1wk", "1mo", "3mo", "5d") else 15
-        if hist is None or hist.empty or len(hist) < min_bars:
+        min_bars = 10 if chart_tf in ("1wk", "1mo", "3mo") else 15
+        if hist.empty or len(hist) < min_bars:
             features["user_chart_tf_data_ok"] = False
             return
 
@@ -368,16 +366,13 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             features["user_chart_tf_volume_ratio"] = _safe(float(vol[-1]) / float(np.mean(vol[-21:-1])), 3)
 
         if chart_tf in _USER_CHART_SWING_STRUCTURE_TFS:
-            try:
-                hi = hist["High"].values.astype(float)
-                lo = hist["Low"].values.astype(float)
-                if len(hi) >= 10:
-                    st = self._detect_market_structure(hi, lo)
-                    features["user_chart_tf_structure_pattern"] = st.get("pattern")
-                    features["user_chart_tf_structure_trend"] = st.get("trend")
-                    features["user_chart_tf_structure_bos"] = bool(st.get("bos"))
-            except Exception:
-                pass
+            hi = hist["High"].values.astype(float)
+            lo = hist["Low"].values.astype(float)
+            if len(hi) >= 10:
+                st = self._detect_market_structure(hi, lo)
+                features["user_chart_tf_structure_pattern"] = st.get("pattern")
+                features["user_chart_tf_structure_trend"] = st.get("trend")
+                features["user_chart_tf_structure_bos"] = bool(st.get("bos"))
 
     # ------------------------------------------------------------------
     # Helpers
@@ -462,13 +457,21 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     # Analise completa
     # ------------------------------------------------------------------
 
-    def analyze(self, asset: str, signal_id: Optional[str] = None, chart_timeframe: Optional[str] = None) -> AgentSignal:
+    def analyze(
+        self,
+        asset: str,
+        signal_id: Optional[str] = None,
+        chart_timeframe: Optional[str] = None,
+        strategy_legenda: Optional[str] = None,
+    ) -> AgentSignal:
         """Computa features, persiste, interpreta via LLM."""
         features = self.compute_features(asset, chart_timeframe=chart_timeframe)
 
         # Montar prompt com features numericas
         feature_text = self._format_features(features)
         prompt = f"Vetor de features estruturais para {asset}:\n\n{feature_text}\n\nInterprete a estrutura e emita seu julgamento."
+        if strategy_legenda:
+            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         if chart_timeframe:
             prompt += (
                 f"\n\nPrioridade: o operador esta com o grafico em **{chart_timeframe}**. "

@@ -50,11 +50,13 @@ class TrendsAgent:
             "raw_text": f"Ativo (Trend Analysis): {asset}\nMetodologia: YFinance Tick Market Volume Anomaly\n{vol_msg}",
         }
 
-    def analyze_trends(self, asset: str, signal_id: Optional[str] = None) -> AgentSignal:
+    def analyze_trends(self, asset: str, signal_id: Optional[str] = None, strategy_legenda: Optional[str] = None) -> AgentSignal:
         volume_features = self.fetch_real_volume_data(asset)
         real_volume_data = volume_features["raw_text"]
         
         prompt = f"Analise em DADOS REAIS o pico de interesse deste ativo na bolsa baseados em volume hoje:\n{real_volume_data}"
+        if strategy_legenda:
+            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         

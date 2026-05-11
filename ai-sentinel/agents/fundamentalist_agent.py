@@ -69,10 +69,12 @@ class FundamentalistAgent:
         payload["raw_text"] = fund_data
         return payload
 
-    def analyze_fundamentals(self, asset: str, signal_id: Optional[str] = None) -> AgentSignal:
+    def analyze_fundamentals(self, asset: str, signal_id: Optional[str] = None, strategy_legenda: Optional[str] = None) -> AgentSignal:
         fundamentals = self.fetch_fundamentals(asset)
         fund_data = fundamentals["raw_text"]
         prompt = f"Atue bloqueando riscos. Analise estes fundamentos corporativos:\n{fund_data}"
+        if strategy_legenda:
+            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         
         response = self.llm.generate_response(self.system_prompt, prompt)
         

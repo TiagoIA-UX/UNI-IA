@@ -114,35 +114,35 @@ class SentinelAgent:
             if decision != "block":
                 decision = "downgrade"
 
-        # 4. Performance-based risk check
-        try:
-            perf = self.outcome_tracker.compute_performance(window_days=7)
-            if perf.get("success") and perf["totals"]["trades"] >= 5:
-                # Drawdown guard
-                if perf["metrics"]["max_drawdown_pct"] >= self.max_drawdown_pct:
-                    reason_codes.append("max_drawdown_limit")
+        # 4. Performance-based risk check (OutcomeTracker obrigatorio — falha explicita se indisponivel)
+        perf = self.outcome_tracker.compute_performance(window_days=7)
+        if not perf.get("success"):
+            raise RuntimeError("SENTINEL: OutcomeTracker devolveu payload de performance invalido.")
+
+        if perf["totals"]["trades"] >= 5:
+            # Drawdown guard
+            if perf["metrics"]["max_drawdown_pct"] >= self.max_drawdown_pct:
+                reason_codes.append("max_drawdown_limit")
+                decision = "block"
+
+            # Win rate degradation
+            if perf["metrics"]["win_rate"] < 35.0:
+                risk_flags.append("critical_win_rate")
+                if decision == "allow":
+                    decision = "downgrade"
+
+            # Loss streak (approximate)
+            recent = self.outcome_tracker.get_recent_outcomes(limit=self.max_consecutive_losses)
+            if not recent.get("success"):
+                raise RuntimeError("SENTINEL: OutcomeTracker devolveu payload invalido em get_recent_outcomes.")
+            if recent.get("count", 0) >= self.max_consecutive_losses:
+                all_losses = all(
+                    item.get("result") == "loss"
+                    for item in recent.get("items", [])[: self.max_consecutive_losses]
+                )
+                if all_losses:
+                    reason_codes.append("loss_streak_limit")
                     decision = "block"
-
-                # Win rate degradation
-                if perf["metrics"]["win_rate"] < 35.0:
-                    risk_flags.append("critical_win_rate")
-                    if decision == "allow":
-                        decision = "downgrade"
-
-                # Loss streak (approximate)
-                recent = self.outcome_tracker.get_recent_outcomes(limit=self.max_consecutive_losses)
-                if recent.get("count", 0) >= self.max_consecutive_losses:
-                    all_losses = all(
-                        item.get("result") == "loss"
-                        for item in recent.get("items", [])[:self.max_consecutive_losses]
-                    )
-                    if all_losses:
-                        reason_codes.append("loss_streak_limit")
-                        decision = "block"
-        except Exception as exc:
-            reason_codes.append("outcome_tracker_unavailable")
-            risk_flags.append(f"tracker_error:{type(exc).__name__}")
-            decision = "block"
 
         # 5. Direction sanity
         if alert.strategy and alert.strategy.direction == "flat":

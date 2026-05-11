@@ -1,13 +1,31 @@
 import uuid
-from typing import Any, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional, Tuple
 
+from core.chart_timeframes import normalize_chart_timeframe, timeframe_strategy_legenda
 from core.contract_validation import normalize_classification, validate_agent_signal, validate_opportunity_alert
+from core.execution_engine_fast import evaluate_fast_path
 from core.feature_store import FeatureStore
 from core.outcome_tracker import OutcomeTracker
 from core.regime_engine import RegimeEngine
-from core.schemas import OpportunityAlert, SentinelGovernanceDecision
+from core.schemas import AgentFailure, AgentSignal, OpportunityAlert, SentinelGovernanceDecision
 from core.sentinel_decision_store import SentinelDecisionStore
 from core.system_state import SystemStateManager
+
+
+# Agentes obrigatorios para AEGIS poder fundir com seguranca.
+_CRITICAL_AGENTS = frozenset({"ATLAS"})
+
+# Mapeamento de funcoes -> nome canonico do AgentSignal.
+_AGENT_LABELS = {
+    "macro": "MacroAgent",
+    "atlas": "ATLAS",
+    "orion": "ORION",
+    "news": "NewsAgent",
+    "trends": "TrendsAgent",
+    "fundamentalist": "FundamentalistAgent",
+    "sentiment": "SentimentAgent",
+}
 
 
 class AnalysisService:
@@ -59,6 +77,26 @@ class AnalysisService:
             alert.score = max(0.0, min(100.0, float(alert.score) + float(alert.governance.expected_confidence_delta)))
         return alert
 
+    def _run_agent_safely(
+        self,
+        *,
+        label: str,
+        runner,
+    ) -> Tuple[Optional[AgentSignal], Optional[AgentFailure]]:
+        """Executa um agente capturando excecao. Nao inventa dados; reporta falha real."""
+        agent_name = _AGENT_LABELS[label]
+        try:
+            signal = runner()
+            return signal, None
+        except Exception as exc:
+            failure = AgentFailure(
+                agent_name=agent_name,
+                error_type=type(exc).__name__,
+                error_message=str(exc)[:512],
+                is_critical=agent_name in _CRITICAL_AGENTS,
+            )
+            return None, failure
+
     def analyze(self, asset: str, signal_id: Optional[str] = None, chart_timeframe: Optional[str] = None) -> OpportunityAlert:
         from agents.atlas_agent import AtlasAgent
         from agents.macro_agent import MacroAgent
@@ -72,44 +110,104 @@ class AnalysisService:
 
         sid = signal_id or str(uuid.uuid4())
 
+        tf_norm = normalize_chart_timeframe(chart_timeframe) if chart_timeframe else None
+        legenda = timeframe_strategy_legenda(tf_norm)
+
         print(f"[{asset}] INICIANDO VARREDURA ZAIRYX IA (signal_id={sid[:8]}...)")
 
-        agents_data = []
+        agents_data: List[AgentSignal] = []
+        agent_failures: List[AgentFailure] = []
 
-        macro = validate_agent_signal(
-            MacroAgent(feature_store=self.feature_store).analyze_macro_context(asset, signal_id=sid),
-            expected_asset=asset,
-        )
-        agents_data.append(macro)
-        print(f"[{asset}] Macro OK: {macro.signal_type} (conf={macro.confidence})")
+        def _run_macro():
+            return validate_agent_signal(
+                MacroAgent(feature_store=self.feature_store).analyze_macro_context(
+                    asset, signal_id=sid, strategy_legenda=legenda
+                ),
+                expected_asset=asset,
+            )
 
-        # === ATLAS — Agente Estrutural Tecnico ===
-        atlas = AtlasAgent(feature_store=self.feature_store)
-        atlas_signal = validate_agent_signal(
-            atlas.analyze(asset, signal_id=sid, chart_timeframe=chart_timeframe),
-            expected_asset=asset,
-        )
-        agents_data.append(atlas_signal)
-        print(f"[{asset}] ATLAS OK: {atlas_signal.signal_type} (conf={atlas_signal.confidence})")
+        def _run_atlas():
+            return validate_agent_signal(
+                AtlasAgent(feature_store=self.feature_store).analyze(
+                    asset, signal_id=sid, chart_timeframe=tf_norm, strategy_legenda=legenda
+                ),
+                expected_asset=asset,
+            )
 
-        # === ORION — Agente Cognitivo de Noticias ===
-        orion = OrionAgent(feature_store=self.feature_store)
-        orion_signal = validate_agent_signal(orion.analyze(asset, signal_id=sid), expected_asset=asset)
-        agents_data.append(orion_signal)
-        print(f"[{asset}] ORION OK: {orion_signal.signal_type} (conf={orion_signal.confidence})")
+        def _run_orion():
+            return validate_agent_signal(
+                OrionAgent(feature_store=self.feature_store).analyze(asset, signal_id=sid, strategy_legenda=legenda),
+                expected_asset=asset,
+            )
 
-        news_signal = validate_agent_signal(
-            NewsAgent(feature_store=self.feature_store).analyze_news(asset, signal_id=sid),
-            expected_asset=asset,
-        )
-        agents_data.append(news_signal)
-        print(f"[{asset}] News OK: {news_signal.signal_type} (conf={news_signal.confidence})")
+        def _run_news():
+            return validate_agent_signal(
+                NewsAgent(feature_store=self.feature_store).analyze_news(asset, signal_id=sid, strategy_legenda=legenda),
+                expected_asset=asset,
+            )
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            fut_macro = pool.submit(self._run_agent_safely, label="macro", runner=_run_macro)
+            fut_atlas = pool.submit(self._run_agent_safely, label="atlas", runner=_run_atlas)
+            fut_orion = pool.submit(self._run_agent_safely, label="orion", runner=_run_orion)
+            fut_news = pool.submit(self._run_agent_safely, label="news", runner=_run_news)
+            macro, f_macro = fut_macro.result()
+            atlas_signal, f_atlas = fut_atlas.result()
+            orion_signal, f_orion = fut_orion.result()
+            news_signal, f_news = fut_news.result()
+
+        for sig in (macro, atlas_signal, orion_signal, news_signal):
+            if sig is not None:
+                agents_data.append(sig)
+
+        for failure in (f_macro, f_atlas, f_orion, f_news):
+            if failure is not None:
+                agent_failures.append(failure)
+                print(f"[{asset}] AGENT FAIL {failure.agent_name}: {failure.error_type}: {failure.error_message}")
+
+        for sig in (macro, atlas_signal, orion_signal, news_signal):
+            if sig is not None:
+                print(f"[{asset}] {sig.agent_name} OK: {sig.signal_type} (conf={sig.confidence})")
+
+        critical_failed = [f for f in agent_failures if f.is_critical]
+        if critical_failed:
+            failure_summary = "; ".join(f"{f.agent_name}={f.error_type}" for f in critical_failed)
+            return self._build_blocked_alert(
+                asset=asset,
+                sid=sid,
+                tf_norm=tf_norm,
+                reason=f"agent_critico_falhou:{failure_summary}",
+                agent_failures=agent_failures,
+                integrity_score=self._compute_integrity_score(agents_data, agent_failures),
+            )
 
         initial_feature_map = self.feature_store.get_signal_feature_map(sid)
         macro_features = initial_feature_map.get("MacroAgent", {}).get("features", {})
         atlas_features = initial_feature_map.get("ATLAS", {}).get("features", {})
         orion_features = initial_feature_map.get("ORION", {}).get("features", {})
         news_features = initial_feature_map.get("NewsAgent", {}).get("features", {})
+
+        fast_path = evaluate_fast_path(atlas_features=atlas_features, chart_timeframe=tf_norm)
+        print(
+            f"[{asset}] FAST_PATH decision={fast_path['decision']} "
+            f"conf={fast_path['confidence_pct']} family={fast_path.get('strategy_family')}"
+        )
+        self.feature_store.persist(
+            signal_id=sid,
+            asset=asset,
+            agent_name="EXECUTION_ENGINE_FAST",
+            features={
+                "decision": fast_path["decision"],
+                "confidence_pct": fast_path["confidence_pct"],
+                "strategy_family": fast_path.get("strategy_family"),
+                **{f"feat_{k}": v for k, v in fast_path.get("features_used", {}).items()},
+            },
+            metadata={
+                "reasons": fast_path.get("reasons", []),
+                "missing": fast_path.get("missing", []),
+                "weights_template": fast_path.get("weights_template", {}),
+            },
+        )
 
         regime_context = self.regime_engine.classify(
             asset=asset,
@@ -142,38 +240,88 @@ class AnalysisService:
             f"(conf={regime_context.regime_confidence})"
         )
 
-        # === Legacy agents (complementares) ===
-        trends = validate_agent_signal(
-            TrendsAgent(feature_store=self.feature_store).analyze_trends(asset, signal_id=sid),
-            expected_asset=asset,
-        )
-        agents_data.append(trends)
-        print(f"[{asset}] Trends OK: {trends.signal_type}")
+        def _run_trends():
+            return validate_agent_signal(
+                TrendsAgent(feature_store=self.feature_store).analyze_trends(
+                    asset, signal_id=sid, strategy_legenda=legenda
+                ),
+                expected_asset=asset,
+            )
 
-        fund = validate_agent_signal(
-            FundamentalistAgent(feature_store=self.feature_store).analyze_fundamentals(asset, signal_id=sid),
-            expected_asset=asset,
-        )
-        agents_data.append(fund)
-        print(f"[{asset}] Fundamentalist OK: {fund.signal_type}")
+        def _run_fund():
+            return validate_agent_signal(
+                FundamentalistAgent(feature_store=self.feature_store).analyze_fundamentals(
+                    asset, signal_id=sid, strategy_legenda=legenda
+                ),
+                expected_asset=asset,
+            )
 
-        if not news_signal.raw_data:
-            raise RuntimeError("NewsAgent nao retornou manchetes brutas para o SentimentAgent.")
+        trends, f_trends = self._run_agent_safely(label="trends", runner=_run_trends)
+        if trends is not None:
+            agents_data.append(trends)
+            print(f"[{asset}] Trends OK: {trends.signal_type}")
+        if f_trends is not None:
+            agent_failures.append(f_trends)
+            print(f"[{asset}] AGENT FAIL {f_trends.agent_name}: {f_trends.error_type}: {f_trends.error_message}")
 
-        senti = validate_agent_signal(
-            SentimentAgent(feature_store=self.feature_store).analyze_sentiment(asset, news_signal.raw_data, signal_id=sid),
-            expected_asset=asset,
-        )
-        agents_data.append(senti)
-        print(f"[{asset}] Sentiment OK: {senti.signal_type}")
+        fund, f_fund = self._run_agent_safely(label="fundamentalist", runner=_run_fund)
+        if fund is not None:
+            agents_data.append(fund)
+            print(f"[{asset}] Fundamentalist OK: {fund.signal_type}")
+        if f_fund is not None:
+            agent_failures.append(f_fund)
+            print(f"[{asset}] AGENT FAIL {f_fund.agent_name}: {f_fund.error_type}: {f_fund.error_message}")
+
+        if news_signal is not None and news_signal.raw_data:
+            def _run_senti():
+                return validate_agent_signal(
+                    SentimentAgent(feature_store=self.feature_store).analyze_sentiment(
+                        asset, news_signal.raw_data, signal_id=sid, strategy_legenda=legenda
+                    ),
+                    expected_asset=asset,
+                )
+
+            senti, f_senti = self._run_agent_safely(label="sentiment", runner=_run_senti)
+            if senti is not None:
+                agents_data.append(senti)
+                print(f"[{asset}] Sentiment OK: {senti.signal_type}")
+            if f_senti is not None:
+                agent_failures.append(f_senti)
+                print(f"[{asset}] AGENT FAIL {f_senti.agent_name}: {f_senti.error_type}: {f_senti.error_message}")
+        else:
+            agent_failures.append(
+                AgentFailure(
+                    agent_name="SentimentAgent",
+                    error_type="MissingUpstream",
+                    error_message="NewsAgent indisponivel: sem manchetes para alimentar Sentiment.",
+                    is_critical=False,
+                )
+            )
+
+        integrity_score = self._compute_integrity_score(agents_data, agent_failures)
 
         # === AEGIS — Fusao Ponderada ===
         aegis = AegisAgent(feature_store=self.feature_store, outcome_tracker=self.outcome_tracker)
         alert = validate_opportunity_alert(
-            aegis.fuse(asset, agents_data, signal_id=sid, regime_context=regime_context, chart_timeframe=chart_timeframe),
+            aegis.fuse(asset, agents_data, signal_id=sid, regime_context=regime_context, chart_timeframe=tf_norm),
             expected_asset=asset,
         )
-        print(f"[{asset}] AEGIS FUSION: score={alert.score} class={alert.classification} dir={alert.strategy.direction if alert.strategy else 'N/A'}")
+
+        # Ajuste de score por integridade (sem inflar: penaliza proporcional aos agentes que falharam).
+        if integrity_score < 100.0 and float(alert.score) > 0:
+            penalty = (100.0 - integrity_score) * 0.5  # ate 50pp de corte se cair toda integridade
+            alert.score = max(0.0, min(100.0, round(float(alert.score) - penalty, 4)))
+            if alert.strategy:
+                alert.strategy.confidence = max(0.0, min(99.0, alert.strategy.confidence - penalty))
+
+        alert.agent_failures = list(agent_failures)
+        alert.integrity_score = float(integrity_score)
+        alert.fast_path_decision = fast_path["decision"]
+
+        print(
+            f"[{asset}] AEGIS FUSION: score={alert.score} class={alert.classification} "
+            f"dir={alert.strategy.direction if alert.strategy else 'N/A'} integrity={integrity_score}"
+        )
 
         sentinel = SentinelAgent(
             system_state=self.system_state,
@@ -201,6 +349,66 @@ class AnalysisService:
             print(f"[{asset}] ARGUS: ALERTA DE REVERSAO ATIVADO")
 
         print(f"[{asset}] PIPELINE COMPLETO (signal_id={sid[:8]}...)")
+        return alert
+
+    def _compute_integrity_score(
+        self,
+        agents_data: List[AgentSignal],
+        agent_failures: List[AgentFailure],
+    ) -> float:
+        """Percentual de agentes esperados que retornaram dados reais (0-100)."""
+        expected = len(_AGENT_LABELS)
+        ok = len(agents_data)
+        if expected <= 0:
+            return 100.0
+        return round(max(0.0, min(100.0, (ok / expected) * 100.0)), 4)
+
+    def _build_blocked_alert(
+        self,
+        *,
+        asset: str,
+        sid: str,
+        tf_norm: Optional[str],
+        reason: str,
+        agent_failures: List[AgentFailure],
+        integrity_score: float,
+    ) -> OpportunityAlert:
+        """Constroi alerta bloqueado quando agente critico falhou. Sem fallback inflado."""
+        from core.schemas import StrategyDecision
+
+        strategy = StrategyDecision(
+            mode="bloqueado",
+            direction="flat",
+            timeframe=tf_norm or "n/a",
+            confidence=0.0,
+            operational_status="agent_critical_failure",
+            reasons=[reason],
+        )
+        governance = SentinelGovernanceDecision(
+            signal_id=sid,
+            regime_id="unknown",
+            regime_version="unknown",
+            sentinel_decision="block",
+            sentinel_confidence=99.0,
+            block_reason_code="agent_critical_failure",
+            expected_confidence_delta=0.0,
+            approved=False,
+            reason_codes=[reason],
+            risk_flags=[f.agent_name for f in agent_failures if f.is_critical],
+        )
+        alert = OpportunityAlert(
+            asset=asset,
+            score=0.0,
+            classification="RISCO",
+            explanation=f"Pipeline bloqueado: {reason}",
+            sources=[],
+            strategy=strategy,
+            governance=governance,
+            chart_timeframe=tf_norm,
+            agent_failures=list(agent_failures),
+            integrity_score=float(integrity_score),
+            fast_path_decision="block",
+        )
         return alert
 
     def _entry_price_for_signal(self, signal_id: str) -> Optional[float]:

@@ -184,13 +184,15 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     # Analysis
     # ------------------------------------------------------------------
 
-    def analyze(self, asset: str, signal_id: Optional[str] = None) -> AgentSignal:
+    def analyze(self, asset: str, signal_id: Optional[str] = None, strategy_legenda: Optional[str] = None) -> AgentSignal:
         """Busca noticias, classifica, computa features, persiste, sintetiza."""
         features, classifications = self.compute_features(asset)
 
         # Synthesis via LLM (on top of computed features, not raw text)
         feature_text = self._format_features(features)
         prompt = f"Vetor de features de noticias para {asset}:\n\n{feature_text}\n\nSintetize o contexto narrativo."
+        if strategy_legenda:
+            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
 
         response = self.llm.generate_response(self.synthesis_prompt, prompt)
         data = extract_json_object(response)

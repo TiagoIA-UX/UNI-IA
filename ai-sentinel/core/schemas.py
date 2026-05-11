@@ -48,6 +48,14 @@ class SentinelGovernanceDecision(BaseModel):
     reason_codes: List[str]
     risk_flags: List[str]
 
+class AgentFailure(BaseModel):
+    """Registo de falha real de um agente. Sem placeholders."""
+    agent_name: str
+    error_type: str
+    error_message: str
+    is_critical: bool = False
+
+
 class OpportunityAlert(BaseModel):
     """Alerta final consolidado pelo OrchestratorAgent"""
     asset: str
@@ -58,5 +66,7 @@ class OpportunityAlert(BaseModel):
     position_reversal_alert: Optional[str] = None # Alerta de proteção de posições abertas
     strategy: Optional[StrategyDecision] = None
     governance: Optional[SentinelGovernanceDecision] = None
-    # Timeframe do grafico solicitado pela UI (ex: 1m, 1h); alimenta ATLAS/AEGIS quando informado.
     chart_timeframe: Optional[str] = None
+    agent_failures: List[AgentFailure] = []
+    integrity_score: float = 100.0
+    fast_path_decision: Optional[str] = None
