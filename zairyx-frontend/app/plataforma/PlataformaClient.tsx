@@ -733,11 +733,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const tfRow = resolveTfRow(tfCatalog, timeframe)
   const tfRowsUi = tfCatalog ?? FALLBACK_TF_CATALOG
   return (
-    <div className={styles.plataforma}>
+    <div className={styles.plataforma} data-platform-root>
 
       {/* ── BARRA SUPERIOR ─────────────────────────────────────────────────── */}
       <header className={styles.topBar}>
         <div className={styles.topBarLeft}>
+          <a href="/" className={styles.topBarBrand} title="Voltar ao site">Boitata IA</a>
+          <span className={styles.topBarSep}>|</span>
           <span className={styles.statusDot} />
           <span className={styles.topBarTitle}>Mesa Operacional</span>
           <span className={styles.topBarSep}>|</span>
@@ -768,6 +770,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         </div>
         <div className={styles.topBarRight}>
           <span className={styles.relogio}>{formatData(now)} {formatHora(now)}</span>
+          <a href="/auth/signout" className={styles.topBarSignout} title="Sair">Sair</a>
         </div>
       </header>
 
