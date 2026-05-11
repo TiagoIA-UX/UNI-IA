@@ -146,6 +146,14 @@ function avaliarEntradaAtrasada(
   urgencia: 'ok' | 'atencao' | 'perigo'
   movimentoConsumidoPorc: number
 } {
+  if (op.status === 'aguardando') {
+    return {
+      podeEntrar: false,
+      mensagem: 'Aguardando o motor (AEGIS) consolidar a analise dos agentes para este timeframe.',
+      urgencia: 'atencao',
+      movimentoConsumidoPorc: 0,
+    }
+  }
   if (!op.precoEntrada || !op.stopLoss || !op.alvo) {
     return { podeEntrar: false, mensagem: 'Aguardando dados completos da operacao.', urgencia: 'atencao', movimentoConsumidoPorc: 0 }
   }
@@ -205,13 +213,11 @@ function avaliarEntradaAtrasada(
 }
 
 // ─── TradingView via iframe (único método confiável no Next.js 2025/2026) ──────
+// Gráfico limpo: sem indicadores injetados (RSI/Volume/MACD/BB). O usuário
+// pode adicionar via "Indicators" do próprio widget se quiser. Os indicadores
+// que o motor consome continuam computados no backend (ATLAS) — não precisam
+// poluir o gráfico aqui.
 function TradingViewChart({ simboloTV, interval }: { simboloTV: string; interval: string }) {
-  const estudos = [
-    'RSI%40tv-basicstudies',
-    'Volume%40tv-basicstudies',
-    'MACD%40tv-basicstudies',
-    'BB%40tv-basicstudies',
-  ].join('%1F')
   const src =
     `https://www.tradingview.com/widgetembed/` +
     `?symbol=${encodeURIComponent(simboloTV)}` +
@@ -222,7 +228,7 @@ function TradingViewChart({ simboloTV, interval }: { simboloTV: string; interval
     `&timezone=America%2FSao_Paulo` +
     `&hide_top_toolbar=0` +
     `&hide_legend=0` +
-    `&studies=${estudos}` +
+    `&hide_side_toolbar=1` +
     `&backgroundColor=rgba(7%2C9%2C10%2C1)`
 
   return (
@@ -260,6 +266,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   /** Falhas reais do pipeline (agente -> tipo de erro). */
   const [agentFailures, setAgentFailures] = useState<{ agent_name: string; error_type: string; error_message: string }[]>([])
   const [abaEsquerda, setAbaEsquerda] = useState<'operacao' | 'ativos'>('operacao')
+  /** Drawer dos Guardiões (direita) colapsável para maximizar o gráfico. Default ABERTO. */
+  const [guardioesAbertos, setGuardioesAbertos] = useState(true)
   const [timeframe, setTimeframe] = useState<string>('H1')
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
   const [carregandoOport, setCarregandoOport] = useState(false)
@@ -277,26 +285,34 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     return () => clearInterval(id)
   }, [])
 
-  // Operação ativa simulada
+  // Operação ativa simulada — reseta sempre que mudar o ATIVO ou o TIMEFRAME.
+  // Sem essa reset o "tempo decorrido" e o "motivo" não condiziam com o TF escolhido.
   useEffect(() => {
     operacaoInicioRef.current = new Date()
     setOperacaoAtiva({
-      id: 'OP-2026-0509-001',
+      id: `OP-${ativoSelecionado.simbolo}-${timeframe}-${Date.now()}`,
       ativo: ativoSelecionado.simbolo,
       nomeAtivo: ativoSelecionado.nome,
       direcao: 'COMPRA',
-      status: 'monitorando',
+      status: 'aguardando',
       inicio: operacaoInicioRef.current,
       fim: null,
-      precoEntrada: 412850,
+      precoEntrada: null,
       precoAtual: precoAtual,
-      stopLoss: 404000,
-      alvo: 428000,
-      score: 87,
-      motivo: 'Rompimento de resistencia em R$ 410.000 com volume 2,3x acima da media. RSI em 58 com espaco para subida. Medias de 20 e 50 periodos alinhadas para cima. Harpia confirma mercado global favoravel.',
+      stopLoss: null,
+      alvo: null,
+      score: 0,
+      motivo: `Aguardando analise do motor para ${ativoSelecionado.nome} no timeframe ${timeframe}. A operacao so e considerada apos AEGIS fundir os sinais reais dos agentes.`,
       resultado: null,
     })
-  }, [ativoSelecionado])
+    // Limpa os agentes ao mudar TF para não exibir scores antigos.
+    setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
+    setAgentFailures([])
+    setIntegrityScore(null)
+    setAnaliseErro(null)
+    // 'precoAtual' propositalmente fora das deps: senão recriaria a operação a cada tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ativoSelecionado, timeframe])
 
   // Preço simulado em tempo real
   useEffect(() => {
@@ -859,13 +875,20 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                 <div className={styles.riscoCVM}>CVM Res. 30 - maximo recomendado: 3% por operacao</div>
               </div>
 
-              {/* Botões */}
+              {/* Botões — bloqueados enquanto não houver análise consolidada,
+                  para evitar ordem manual sem direcao real do motor. */}
               <div className={styles.botoesOrdem}>
-                <button className={styles.btnComprar}
+                <button
+                  className={styles.btnComprar}
+                  disabled={operacaoAtiva.status === 'aguardando' || scoreFinal === null}
+                  title={scoreFinal === null ? 'Aguardando analise (AEGIS) para liberar ordem.' : 'Comprar agora'}
                   onClick={() => { setModalOrdem('COMPRA'); setAceiteRisco(false) }}>
                   ▲ COMPRAR
                 </button>
-                <button className={styles.btnVender}
+                <button
+                  className={styles.btnVender}
+                  disabled={operacaoAtiva.status === 'aguardando' || scoreFinal === null}
+                  title={scoreFinal === null ? 'Aguardando analise (AEGIS) para liberar ordem.' : 'Vender agora'}
                   onClick={() => { setModalOrdem('VENDA'); setAceiteRisco(false) }}>
                   ▼ VENDER
                 </button>
@@ -990,23 +1013,50 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
           </div>
         </main>
 
-        {/* ── COLUNA DIREITA: AGENTES ─────────────────────────────────────── */}
-        <aside className={styles.colunaDireita}>
+        {/* ── COLUNA DIREITA: AGENTES (drawer colapsavel) ────────────────── */}
+        <aside className={`${styles.colunaDireita} ${guardioesAbertos ? '' : styles.colunaDireitaFechada}`}>
           <div className={styles.agentesHeader}>
-            <span className={styles.agentesTitulo}>Guardioes Boitata</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {carregandoAnalise && <span className={styles.analisandoChip}>Analisando...</span>}
-              {scoreFinal !== null ? (
-                <span style={{ fontSize: '1rem', fontWeight: 700, color: corScore(scoreFinal) }}>
-                  {scoreFinal}/100
+            {guardioesAbertos ? (
+              <>
+                <span className={styles.agentesTitulo}>Guardioes Boitata</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {carregandoAnalise && <span className={styles.analisandoChip}>Analisando...</span>}
+                  {scoreFinal !== null ? (
+                    <span style={{ fontSize: '1rem', fontWeight: 700, color: corScore(scoreFinal) }}>
+                      {scoreFinal}/100
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', color: '#7a7060', fontFamily: 'var(--mono)' }}>—/100</span>
+                  )}
+                  <button
+                    type="button"
+                    className={styles.drawerToggle}
+                    onClick={() => setGuardioesAbertos(false)}
+                    aria-label="Esconder painel dos guardioes"
+                    title="Esconder painel — mais espaço para o gráfico"
+                  >
+                    ›
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                className={styles.drawerToggleOpen}
+                onClick={() => setGuardioesAbertos(true)}
+                aria-label="Abrir painel dos guardioes"
+                title={`Abrir guardiões${scoreFinal !== null ? ` · AEGIS ${scoreFinal}/100` : ''}`}
+              >
+                <span className={styles.drawerToggleArrow}>‹</span>
+                <span className={styles.drawerToggleScore} style={{ color: scoreFinal !== null ? corScore(scoreFinal) : '#7a7060' }}>
+                  {scoreFinal !== null ? `${scoreFinal}` : '—'}
                 </span>
-              ) : (
-                <span style={{ fontSize: '0.7rem', color: '#7a7060', fontFamily: 'var(--mono)' }}>—/100</span>
-              )}
-            </div>
+                <span className={styles.drawerToggleLabel}>AEGIS</span>
+              </button>
+            )}
           </div>
 
-          {(analiseErro || agentFailures.length > 0 || integrityScore != null) && (
+          {guardioesAbertos && (analiseErro || agentFailures.length > 0 || integrityScore != null) && (
             <div
               style={{
                 margin: '8px 8px 0',
@@ -1039,7 +1089,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
             </div>
           )}
 
-          <div className={styles.agentesLista}>
+          {guardioesAbertos && <div className={styles.agentesLista}>
             {agentes.map(a => (
               <div key={a.id} className={styles.agenteCard}>
                 <div className={styles.agenteTop}>
@@ -1069,7 +1119,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
         </aside>
       </div>
 
