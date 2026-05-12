@@ -10,6 +10,11 @@ Princípio Fundador
 ✅ Pesquisa aplicada depois — P&D com ROI definido antes de iniciar
 ✅ Risco sempre controlado — nunca supera 1–3% por posição
 Boitatá IA — Crescimento com Governança, não com Improviso
+
+### Módulo DOC (experimental, fase de testes)
+
+Pacote **`boitata-doc/`**: diário de operações em criptoativos / rastreabilidade fiscal **documental** (não integrado ao runtime do `ai-sentinel`). Procedimentos auditáveis: `boitata-doc/docs/PROCEDIMENTOS-TESTE-AUDITORIA.md`.
+
 ---
 🚀 Quick Start (5 minutos)
 ```bash
