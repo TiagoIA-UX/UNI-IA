@@ -97,6 +97,7 @@ git checkout v1.2.0
 ```
 
 - **Cadência desejada:** *patch* (correção), *minor* (funcionalidades), *major* (*breaking* ou governança).
+- **Registo público de alterações:** [`CHANGELOG.md`](CHANGELOG.md) (formato inspirado em *Keep a Changelog*).
 - Marcos do módulo DOC: tags `v*-doc-*` (ex.: pré-release **`v1.3.0-doc-beta`**) indicam estado do **instrumento documental**, **não** homologação de investimento nem certificação regulatória.
 - Lista e notas em: [GitHub Releases](https://github.com/TiagoIA-UX/UNI-IA/releases).
 
@@ -166,6 +167,7 @@ Variáveis de exemplo: `LLM_FALLBACK_*` em `.env.example`.
 | `AGENTES_GUARDIAO.md` | Conselho e papéis |
 | `boitata-doc/README.md` | Módulo DOC |
 | `schema.sql` | Base de dados |
+| `CHANGELOG.md` | Histórico versionado de alterações relevantes |
 | `.env.example` | Variáveis de ambiente |
 
 ---
