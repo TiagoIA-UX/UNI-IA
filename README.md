@@ -11,9 +11,12 @@ Princípio Fundador
 ✅ Risco sempre controlado — nunca supera 1–3% por posição
 Boitatá IA — Crescimento com Governança, não com Improviso
 
-### Módulo DOC (experimental, fase de testes)
+### Módulo DOC (experimental, fase de desenvolvimento)
 
-Pacote **`boitata-doc/`**: diário de operações em criptoativos / rastreabilidade fiscal **documental** (não integrado ao runtime do `ai-sentinel`). Procedimentos auditáveis: `boitata-doc/docs/PROCEDIMENTOS-TESTE-AUDITORIA.md`.
+- **`boitata-doc/`** — pacote Python de apoio (apuração documental, exports, NAO simbólica).
+- **`ai-sentinel`** — integração **opcional**: `DOC_LEDGER_ENABLED=true` grava uma linha JSON por cada ordem bem-sucedida do copy trade / mesa (`core/doc_ledger.py` → ficheiro configurável; padrão Windows `C:\BoitataDOC\data\doc_ledger.jsonl`). O campo **`hint_fiscal_preliminar`** é só indício (timeframe do contexto); **day trade vs swing** para efeitos tributários exige **conferência de calendário abertura/fecho** e orientação profissional.
+- **Política de release:** desenvolvimento ativo. **Antes** de operação real em produção, será publicado um **release** com notas de risco e checklist. Tags `v*-doc-*` marcam marcos técnicos DOC/ledger — **não** constituem homologação para investimento.
+- Procedimentos: `boitata-doc/docs/PROCEDIMENTOS-TESTE-AUDITORIA.md` · script ACL `boitata-doc/scripts/win/ensure-boitatadoc-admin-c-drive.ps1`.
 
 ---
 🚀 Quick Start (5 minutos)

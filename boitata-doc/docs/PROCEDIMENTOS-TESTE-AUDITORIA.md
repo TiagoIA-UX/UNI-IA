@@ -12,7 +12,7 @@
 | Caminho versionado sob teste | Motivo |
 |------------------------------|--------|
 | `boitata-doc/` | novo “software filho” — apenas este ramo deve ser configurado/evoluído para DOC |
-| `ai-sentinel/`, `zairyx-frontend/` | mantidos **íntegros**; integração DOC futura = opt-in |
+| `ai-sentinel/`, `zairyx-frontend/` | runtime operacional — integração DOC **opt-in** via `DOC_LEDGER_*` (.env); não obrigatório |
 
 ---
 
@@ -44,7 +44,18 @@ robocopy E:\01Boitata\boitata-doc C:\BoitataDOC /MIR /R:2 /W:2 /XD .venv __pycac
 
 Opcionalmente, após cópia, criar um repositório Git **só** em `C:\BoitataDOC` para trabalho paralelo isolado (`git init`); ou continuar versionando só a cópia em `E:\01Boitata\boitata-doc` dentro do mesmo remoto principal (recomendado para uma única “fonte de verdade” no GitHub).
 
----
+### 3.1 Permissões (`C:\` — uso administrativo local)
+
+O projeto **não remove** políticas de segurança do SO; apenas documenta boas práticas:
+
+1. Executar **`boitata-doc/scripts/win/ensure-boitatadoc-admin-c-drive.ps1`** (preferencialmente como **Administrador**) para criar `C:\BoitataDOC\data` e conceder **Modify** herdável ao seu utilizador (`icacls`).
+2. Se a organização **bloquear** escrita na raiz de `C:\`, defina no `.env.local` da API **`DOC_LEDGER_PATH`** para um caminho no seu perfil (ex.: `%USERPROFILE%\BoitataDOC\data\doc_ledger.jsonl`).
+
+### 3.2 Integração `ai-sentinel` (ledger JSONL)
+
+Variáveis: ver `.env.example` — `DOC_LEDGER_ENABLED`, `DOC_LEDGER_PATH`. Cada ordem **executada** pelo `CopyTradeService` pode gerar uma linha com indicadores para análise DAY/SWING **preliminar** (referência de timeframe); a matéria de facto fiscal continua externa a este repositório.
+
+
 
 ## 4. Trilho de evidência (“audit trail”) mínimo
 

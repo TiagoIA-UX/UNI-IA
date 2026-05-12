@@ -3,12 +3,14 @@ import json
 import hmac
 import time
 import hashlib
+import logging
 import urllib.parse
 from typing import Dict, Any, Optional
 import requests
 import yfinance as yf
 from core.schemas import OpportunityAlert
 
+logger = logging.getLogger(__name__)
 
 # ===== ATR-BASED STOP LOSS =====
 # Mapeamento de symbols MB/Bybit → yfinance
@@ -491,10 +493,23 @@ class CopyTradeService:
                 "sources":            alert.sources,
                 "strategy_mode":      alert.strategy.mode if alert.strategy else None,
                 "strategy_timeframe": alert.strategy.timeframe if alert.strategy else None,
+                "chart_timeframe":    getattr(alert, "chart_timeframe", None),
             },
         }
 
         broker_response = self.adapter.place_order(payload)
+        try:
+            from core.doc_ledger import record_broker_execution
+
+            record_broker_execution(
+                provider=self.provider,
+                payload_sent=payload,
+                broker_response=broker_response if isinstance(broker_response, dict) else {},
+            )
+        except Exception as exc:
+
+            logger.warning("DOC ledger opcional falhou (ignorado): %s", exc)
+
         return {
             "success":         True,
             "payload":         payload,
@@ -544,6 +559,18 @@ class CopyTradeService:
             payload["risk_percent"] = risk_percent
 
         broker_response = self.adapter.place_order(payload)
+        try:
+            from core.doc_ledger import record_broker_execution
+
+            record_broker_execution(
+                provider=self.provider,
+                payload_sent=payload,
+                broker_response=broker_response if isinstance(broker_response, dict) else {},
+            )
+        except Exception as exc:
+
+            logger.warning("DOC ledger opcional falhou (ignorado): %s", exc)
+
         return {
             "success":         True,
             "payload":         payload,
