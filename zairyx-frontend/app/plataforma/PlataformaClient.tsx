@@ -37,6 +37,15 @@ interface AnalyzeAlertPayload {
   } | null
   governance?: { approved?: boolean } | null
 }
+
+/** Corpo JSON de POST /api/analyze/{asset} (campos usados na plataforma). */
+interface AnalyzeApiBody {
+  success?: boolean
+  data?: unknown
+  agent_scores?: Record<string, number | null>
+  agent_failures?: { agent_name: string; error_type: string; error_message: string }[]
+  integrity_score?: number
+}
 interface Oportunidade {
   simbolo: string
   nome: string
@@ -152,6 +161,41 @@ const API_BASE = ((): string => {
   }
   return 'http://127.0.0.1:8000'
 })()
+
+/** Par MB (`BTC-BRL`) → segmento `POST /api/analyze/{asset}` como `BTCUSDT` (motor/yfinance). */
+function mbSimboloParaAssetAnalyzePath(simboloMb: string): string {
+  const s = simboloMb.trim().toUpperCase()
+  const m1 = s.match(/^([A-Z0-9]+)-BRL$/)
+  if (m1) return `${m1[1]}USDT`
+  const compact = s.replace(/-/g, '')
+  if (compact.endsWith('BRL') && compact.length > 4) return `${compact.slice(0, -3)}USDT`
+  return compact
+}
+
+/** URL completa POST /api/analyze/{asset} (asset sempre no path; encodeURIComponent). */
+function urlPostAnalyze(simboloMb: string): string {
+  const asset = mbSimboloParaAssetAnalyzePath(simboloMb)
+  return `${API_BASE}/api/analyze/${encodeURIComponent(asset)}`
+}
+
+function parseCorpoAnalyzeJson(text: string, urlPedido: string, httpStatus: number): AnalyzeApiBody {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    throw new Error(`Resposta vazia (${urlPedido}, HTTP ${httpStatus}).`)
+  }
+  if (trimmed.startsWith('<')) {
+    throw new Error(
+      `Resposta HTML em vez de JSON (${urlPedido}, HTTP ${httpStatus}). ` +
+        'Verifique rota POST /api/analyze/{asset} e proxy (evita Unexpected token < no cliente).'
+    )
+  }
+  try {
+    return JSON.parse(text) as AnalyzeApiBody
+  } catch {
+    const head = trimmed.slice(0, 160).replace(/\s+/g, ' ')
+    throw new Error(`JSON invalido (${urlPedido}, HTTP ${httpStatus}): ${head}`)
+  }
+}
 
 // ─── Helpers de tempo ─────────────────────────────────────────────────────────
 function pad(n: number) { return String(n).padStart(2, '0') }
@@ -454,7 +498,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     analiseAbortRef.current = ctrl
 
     const row = resolveTfRow(tfCatalog, tfLabel)
-    const assetParam = simbolo.replace('-BRL', '') + 'BRL'
+    const assetPath = mbSimboloParaAssetAnalyzePath(simbolo)
+    const urlPost = urlPostAnalyze(simbolo)
     const startedAt = Date.now()
 
     setCarregandoAnalise(true)
@@ -466,25 +511,35 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       try { ctrl.abort('timeout') } catch { /* ignora */ }
     }, 60000)
 
-    console.info('[Boitata] analyze REQUEST', { asset: assetParam, tf: row.canonical, url: `${API_BASE}/api/analyze/${assetParam}` })
+    console.info('[Boitata] analyze REQUEST', { assetPath, tf: row.canonical, url: urlPost })
 
     try {
-      const r = await fetch(`${API_BASE}/api/analyze/${assetParam}`, {
+      const r = await fetch(urlPost, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
         signal: ctrl.signal,
       })
+      const bodyText = await r.text()
       if (!r.ok) {
         let detail = `HTTP ${r.status}`
         try {
-          const j = await r.json()
-          if (j?.detail) detail = String(j.detail)
-        } catch { /* corpo vazio */ }
+          const j = JSON.parse(bodyText) as { detail?: unknown }
+          if (j?.detail != null) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)
+        } catch {
+          detail = bodyText.trimStart().startsWith('<')
+            ? `HTTP ${r.status} — corpo HTML (rota ou proxy errado). Pedido: ${urlPost}`
+            : `${detail}: ${bodyText.slice(0, 220)}`
+        }
         throw new Error(detail)
       }
-      const data = await r.json()
-      console.info('[Boitata] analyze RESPONSE', { ms: Date.now() - startedAt, agent_scores: data.agent_scores, integrity_score: data.integrity_score, agent_failures: data.agent_failures })
+      const data = parseCorpoAnalyzeJson(bodyText, urlPost, r.status)
+      console.info('[Boitata] analyze RESPONSE', {
+        ms: Date.now() - startedAt,
+        agent_scores: data.agent_scores,
+        integrity_score: data.integrity_score,
+        agent_failures: data.agent_failures,
+      })
 
       const scores: Record<string, number | null> = data.agent_scores ?? {}
       const failures: { agent_name: string; error_type: string; error_message: string }[] =
@@ -576,9 +631,10 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         return
       }
       const msg = err instanceof Error ? err.message : 'falha desconhecida'
+      const isNet = /Failed to fetch|network|TypeError/i.test(msg)
       const friendly = aborted
-        ? `Tempo esgotado (>60s). O servidor pode estar processando, sobrecarregado ou indisponivel em ${API_BASE}.`
-        : /Failed to fetch|network|TypeError/i.test(msg)
+        ? `Tempo esgotado (>60s). Pedido: POST /api/analyze/{asset} em ${API_BASE}.`
+        : isNet
           ? (() => {
               const host =
                 typeof window !== 'undefined' ? window.location.hostname : ''
@@ -662,12 +718,20 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     try {
       const resultados = await Promise.allSettled(
         candidatos.map(a =>
-          fetch(`${API_BASE}/api/analyze/${a.simbolo.replace('-BRL', '') + 'BRL'}`, {
+          fetch(urlPostAnalyze(a.simbolo), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
             signal: AbortSignal.timeout(8000),
-          }).then(r => r.ok ? r.json() : null)
+          }).then(async r => {
+            if (!r.ok) return null
+            const t = await r.text()
+            try {
+              return JSON.parse(t) as Record<string, unknown>
+            } catch {
+              return null
+            }
+          })
         )
       )
       const ranking: Oportunidade[] = resultados
@@ -691,7 +755,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
           if (r.status !== 'fulfilled' || !r.value) {
             return base
           }
-          const d = r.value.data ?? r.value
+          const d = (r.value.data ?? r.value) as { score?: unknown; classification?: unknown }
           const rawScore = d.score
           const s: number | null = typeof rawScore === 'number' && Number.isFinite(rawScore) ? rawScore : null
           const cls = typeof d.classification === 'string' ? d.classification : null
@@ -883,6 +947,14 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
           <a href="/auth/signout" className={styles.topBarSignout} title="Sair">Sair</a>
         </div>
       </header>
+
+      {analiseErro && (
+        <div className={styles.erroApiBanner} role="alert">
+          <strong>Analise API</strong>
+          {' — '}
+          {analiseErro}
+        </div>
+      )}
 
       {/* ── LAYOUT PRINCIPAL ────────────────────────────────────────────────── */}
       <div className={styles.layout}>
