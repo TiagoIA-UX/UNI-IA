@@ -24,6 +24,7 @@ from typing import Any, Dict, Optional
 import yfinance as yf
 import numpy as np
 
+from adapters.mercadobitcoin_market import get_ticker as get_mb_ticker, normalize_mb_market
 from agents.market_utils import resolve_market_ticker
 from core.chart_timeframes import yf_interval_period
 from core.feature_store import FeatureStore
@@ -308,7 +309,24 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         if chart_timeframe:
             self._inject_user_chart_features(ticker, features, chart_timeframe.strip().lower())
 
+        self._overlay_mercadobitcoin_brl_features(asset, features)
         return features
+
+    def _overlay_mercadobitcoin_brl_features(self, asset: str, features: Dict[str, Any]) -> None:
+        """Se o ativo e BRL/MB, mantem preco operacional alinhado ao broker."""
+        normalized = (asset or "").upper().replace("/", "").replace("-", "")
+        if not normalized.endswith("BRL"):
+            return
+        try:
+            ticker = get_mb_ticker(normalize_mb_market(asset))
+            last = float(ticker["last"])
+        except Exception:
+            return
+        features["market_provider"] = "mercadobitcoin"
+        features["market_symbol"] = normalize_mb_market(asset)
+        features["price_last_brl"] = _safe(last)
+        features["user_chart_tf_last_close"] = _safe(last)
+        features["price_last"] = _safe(last)
 
     def _inject_user_chart_features(self, ticker: Any, features: Dict[str, Any], chart_tf: str) -> None:
         """Enriquece o vetor com leitura alinhada ao timeframe do grafico (UI / TradingView)."""

@@ -11,6 +11,8 @@ from typing import Any, Dict, List
 from core.contract_validation import normalize_classification
 from core.execution_integrity import ExecutionIntegrityError
 from core.schemas import OpportunityAlert, model_to_dict
+from core.chart_timeframes import normalize_chart_timeframe, public_timeframes_catalog
+from core.signal_lifecycle import candle_key, last_closed_candle_end
 
 
 def _utcnow_iso() -> str:
@@ -35,6 +37,7 @@ class SignalScanner:
         self._last_results: List[Dict[str, Any]] = []
         self._recent_alerts: List[Dict[str, Any]] = []
         self._dedupe_cache: Dict[str, float] = {}
+        self._confirmed_candle_cache: Dict[str, float] = {}
         self._dispatch_log_lock = threading.Lock()
         self._dispatch_log_path = self._resolve_dispatch_log_path()
 
@@ -191,22 +194,40 @@ class SignalScanner:
 
     def _cfg(self) -> Dict[str, Any]:
         assets_raw = os.getenv("SIGNAL_SCAN_ASSETS", "")
+        timeframes_raw = os.getenv("SIGNAL_SCAN_TIMEFRAMES", "5m,15m,1h")
         allowed_classifications_raw = os.getenv("SIGNAL_ALLOWED_CLASSIFICATIONS", "OPORTUNIDADE")
         assets = [asset.strip().upper() for asset in assets_raw.split(",") if asset.strip()]
+        timeframes = self._parse_timeframes(timeframes_raw)
         allowed_classifications = [
             item.strip().upper() for item in allowed_classifications_raw.split(",") if item.strip()
         ]
         return {
             "enabled": os.getenv("SIGNAL_SCANNER_ENABLED", "false").lower() == "true",
             "assets": assets,
+            "timeframes": timeframes,
             "interval_seconds": max(float(os.getenv("SIGNAL_SCAN_INTERVAL_SECONDS", "60")), 10.0),
             "stagger_seconds": max(float(os.getenv("SIGNAL_SCAN_STAGGER_SECONDS", "2")), 0.0),
             "min_score": float(os.getenv("SIGNAL_MIN_SCORE", "75")),
             "allowed_classifications": allowed_classifications,
             "dedupe_ttl_seconds": max(float(os.getenv("SIGNAL_DEDUPE_TTL_SECONDS", "300")), 30.0),
+            "confirmed_candle_ttl_seconds": max(float(os.getenv("SIGNAL_CONFIRMED_CANDLE_TTL_SECONDS", "86400")), 3600.0),
+            "candle_close_grace_seconds": max(int(os.getenv("SIGNAL_CANDLE_CLOSE_GRACE_SECONDS", "5")), 0),
             "recent_limit": max(int(os.getenv("SIGNAL_RECENT_LIMIT", "20")), 5),
             "session_filter_enabled": os.getenv("SIGNAL_SESSION_FILTER_ENABLED", "false").lower() == "true",
         }
+
+    def _parse_timeframes(self, raw: str) -> List[str]:
+        values = [item.strip() for item in (raw or "").split(",") if item.strip()]
+        if not values:
+            values = ["5m", "15m", "1h"]
+        if any(item.lower() == "all" for item in values):
+            return [str(row["canonical"]) for row in public_timeframes_catalog()]
+        out: List[str] = []
+        for item in values:
+            tf = normalize_chart_timeframe(item)
+            if tf and tf not in out:
+                out.append(tf)
+        return out or ["5m", "15m", "1h"]
 
     def _prune_dedupe_cache(self, ttl_seconds: float):
         now = time.time()
@@ -214,11 +235,19 @@ class SignalScanner:
         for key in expired_keys:
             self._dedupe_cache.pop(key, None)
 
+    def _prune_confirmed_candle_cache(self, ttl_seconds: float):
+        now = time.time()
+        expired_keys = [key for key, created_at in self._confirmed_candle_cache.items() if now - created_at > ttl_seconds]
+        for key in expired_keys:
+            self._confirmed_candle_cache.pop(key, None)
+
     def _signature(self, alert: OpportunityAlert) -> str:
         explanation = (alert.explanation or "").strip().upper()[:160]
+        timeframe = alert.chart_timeframe or (alert.strategy.timeframe if alert.strategy else "")
         return "|".join(
             [
                 (alert.asset or "").upper(),
+                str(timeframe or "").upper(),
                 (alert.classification or "").upper(),
                 str(int(round(float(alert.score)))),
                 explanation,
@@ -246,6 +275,10 @@ class SignalScanner:
         }
         self._recent_alerts.insert(0, item)
         self._recent_alerts = self._recent_alerts[:recent_limit]
+
+    def _remember_confirmed_candle(self, confirmed_key: str | None):
+        if confirmed_key:
+            self._confirmed_candle_cache[confirmed_key] = time.time()
 
     def _is_in_trading_session(self) -> bool:
         """Retorna True se o horario UTC atual estiver numa janela de alta liquidez.
@@ -366,12 +399,30 @@ class SignalScanner:
         except Exception as err:
             self._last_error = str(err)
 
-    def scan_asset(self, asset: str) -> Dict[str, Any]:
+    def scan_asset(self, asset: str, timeframe: str | None = None) -> Dict[str, Any]:
         cfg = self._cfg()
+        tf = normalize_chart_timeframe(timeframe) if timeframe else (cfg["timeframes"][0] if cfg["timeframes"] else None)
         signal_id = str(uuid.uuid4())
+        candle_end = last_closed_candle_end(tf, grace_seconds=cfg["candle_close_grace_seconds"]) if tf else None
+        confirmed_key = candle_key(asset, tf, candle_end) if candle_end else None
+        if confirmed_key:
+            self._prune_confirmed_candle_cache(cfg["confirmed_candle_ttl_seconds"])
+            if confirmed_key in self._confirmed_candle_cache:
+                return {
+                    "asset": asset.upper(),
+                    "timeframe": tf,
+                    "classification": "SKIPPED",
+                    "score": 0,
+                    "dispatched": False,
+                    "desk_action": "ignored",
+                    "reason": "candle_ja_confirmado",
+                    "signal_id": signal_id,
+                    "candle_close": candle_end.isoformat().replace("+00:00", "Z"),
+                }
         if self.system_state and not self.system_state.can_generate_signal():
             blocked_result = {
                 "asset": asset.upper(),
+                "timeframe": tf,
                 "classification": "BLOCKED",
                 "score": 0,
                 "dispatched": False,
@@ -386,7 +437,7 @@ class SignalScanner:
                     "asset": asset.upper(),
                     "classification": "BLOCKED",
                     "score": 0.0,
-                    "timeframe": None,
+                    "timeframe": tf,
                     "strategy": None,
                     "mandate": {},
                     "status": "blocked",
@@ -400,6 +451,7 @@ class SignalScanner:
         if cfg.get("session_filter_enabled") and not self._is_in_trading_session():
             skipped_result = {
                 "asset": asset.upper(),
+                "timeframe": tf,
                 "classification": "SKIPPED",
                 "score": 0,
                 "dispatched": False,
@@ -414,7 +466,7 @@ class SignalScanner:
                     "asset": asset.upper(),
                     "classification": "SKIPPED",
                     "score": 0.0,
-                    "timeframe": None,
+                    "timeframe": tf,
                     "strategy": None,
                     "mandate": {},
                     "status": "blocked",
@@ -426,9 +478,14 @@ class SignalScanner:
             )
             return skipped_result
         try:
-            alert = self.analysis_service.analyze(asset, signal_id=signal_id)
+            try:
+                alert = self.analysis_service.analyze(asset, signal_id=signal_id, chart_timeframe=tf)
+            except TypeError:
+                alert = self.analysis_service.analyze(asset, signal_id=signal_id)
             result: Dict[str, Any] = {
                 "asset": asset.upper(),
+                "timeframe": tf,
+                "candle_close": candle_end.isoformat().replace("+00:00", "Z") if candle_end else None,
                 "classification": alert.classification,
                 "score": alert.score,
                 "dispatched": False,
@@ -445,6 +502,7 @@ class SignalScanner:
                     scanner_result=result,
                     error=result["reason"],
                 )
+                self._remember_confirmed_candle(confirmed_key)
                 return result
 
             if self._is_duplicate(alert, cfg["dedupe_ttl_seconds"]):
@@ -456,6 +514,7 @@ class SignalScanner:
                     scanner_result=result,
                     error=result["reason"],
                 )
+                self._remember_confirmed_candle(confirmed_key)
                 return result
 
             dispatch_result = self._dispatch_alert(alert)
@@ -492,11 +551,13 @@ class SignalScanner:
             )
 
             self._remember_alert(alert, result, cfg["recent_limit"])
+            self._remember_confirmed_candle(confirmed_key)
             return result
         except Exception as err:
             self._last_error = str(err)
             error_result = {
                 "asset": asset.upper(),
+                "timeframe": tf,
                 "error": str(err),
                 "signal_id": signal_id,
                 "error_type": err.__class__.__name__,
@@ -527,16 +588,19 @@ class SignalScanner:
         cfg = self._cfg()
         if not cfg["assets"]:
             return {"success": False, "reason": "nenhum_ativo_configurado"}
+        if not cfg["timeframes"]:
+            return {"success": False, "reason": "nenhum_timeframe_configurado"}
 
         self._cycle_count += 1
         self._last_cycle_started_at = _utcnow_iso()
         results = []
 
-        for index, asset in enumerate(cfg["assets"]):
+        pairs = [(asset, tf) for asset in cfg["assets"] for tf in cfg["timeframes"]]
+        for index, (asset, tf) in enumerate(pairs):
             if self._stop_event.is_set():
                 break
-            results.append(self.scan_asset(asset))
-            if index < len(cfg["assets"]) - 1 and cfg["stagger_seconds"] > 0:
+            results.append(self.scan_asset(asset, timeframe=tf))
+            if index < len(pairs) - 1 and cfg["stagger_seconds"] > 0:
                 time.sleep(cfg["stagger_seconds"])
 
         self._last_cycle_completed_at = _utcnow_iso()

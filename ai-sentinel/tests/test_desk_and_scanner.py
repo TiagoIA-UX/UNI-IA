@@ -116,6 +116,19 @@ class _FakeAnalysisService:
         return self.alert
 
 
+class _FakeAnalysisServiceWithTimeframe:
+    def __init__(self, alert):
+        self.alert = alert
+        self.calls = []
+
+    def analyze(self, asset, signal_id=None, chart_timeframe=None):
+        self.calls.append((asset, chart_timeframe, signal_id))
+        if self.alert.strategy:
+            self.alert.strategy.timeframe = chart_timeframe or self.alert.strategy.timeframe
+        self.alert.chart_timeframe = chart_timeframe
+        return self.alert
+
+
 class _FailingIntegrityGuard:
     def validate_dispatch_ready(self, alert):
         raise RuntimeError("execution_integrity_failed")
@@ -284,6 +297,58 @@ class DeskAndScannerTests(unittest.TestCase):
         self.assertEqual(result["error_type"], "RuntimeError")
         self.assertEqual(result["error_stage"], "integrity_guard")
         self.assertEqual(copy_trade.executions, [])
+
+    def test_scanner_scans_configured_timeframes_once_per_closed_candle(self):
+        from core.schemas import StrategyDecision
+
+        state = SystemStateManager(UniIAMode.PAPER)
+        state.status = SystemStatus.READY
+        alert = OpportunityAlert(
+            asset="BTCUSDT",
+            score=90,
+            classification="OPORTUNIDADE",
+            explanation="Setup confirmado no fechamento do candle.",
+            sources=["test"],
+            strategy=StrategyDecision(
+                mode="fast_scalp",
+                direction="long",
+                timeframe="5m",
+                confidence=90,
+                operational_status="confirmed",
+                reasons=["closed_candle_confirmed"],
+            ),
+            chart_timeframe="5m",
+        )
+        env = {
+            **self.base_env,
+            "UNI_IA_MODE": "paper",
+            "SIGNAL_SCAN_TIMEFRAMES": "5m,15m",
+            "SIGNAL_SCAN_STAGGER_SECONDS": "0",
+            "SIGNAL_CANDLE_CLOSE_GRACE_SECONDS": "0",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            desk = PrivateDesk(
+                copy_trade_service=_FakeCopyTradeService(),
+                audit_service=_FakeAuditService(),
+                desk_store=_FakeDeskStore(),
+                system_state=state,
+            )
+            analysis = _FakeAnalysisServiceWithTimeframe(alert)
+            scanner = SignalScanner(
+                analysis_service=analysis,
+                telegram_bot=_FakeTelegramBot(),
+                private_desk=desk,
+                audit_service=_FakeAuditService(),
+                system_state=state,
+            )
+
+            first = scanner.run_cycle()
+            second = scanner.run_cycle()
+
+        self.assertEqual([call[1] for call in analysis.calls], ["5m", "15m"])
+        self.assertEqual(len(first["results"]), 2)
+        self.assertTrue(all(item["dispatched"] for item in first["results"]))
+        self.assertEqual([item["reason"] for item in second["results"]], ["candle_ja_confirmado", "candle_ja_confirmado"])
 
     def test_reject_in_memory_requires_pending_status(self):
         state = SystemStateManager(UniIAMode.APPROVAL)

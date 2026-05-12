@@ -1,5 +1,11 @@
 def resolve_market_ticker(asset: str) -> str:
-    normalized = (asset or "").upper().replace("/", "").strip()
+    normalized = (asset or "").upper().replace("/", "").replace("-", "").strip()
+
+    if normalized.endswith("BRL") and len(normalized) > 3:
+        crypto_bases = {"BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "LTC", "LINK", "DOT", "MATIC"}
+        base_asset = normalized[:-3]
+        if base_asset in crypto_bases:
+            return f"{base_asset}-USD"
 
     if normalized == "USD":
         return "USDBRL=X"

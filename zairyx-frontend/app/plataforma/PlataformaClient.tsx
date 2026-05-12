@@ -95,6 +95,30 @@ function resolveTfRow(catalog: TfMeta[] | null, label: string): TfMeta {
   return rows.find(r => r.label === label) ?? rows.find(r => r.label === 'H1')!
 }
 
+function timeframeMs(canonical: string): number | null {
+  const map: Record<string, number> = {
+    '1m': 60_000,
+    '2m': 120_000,
+    '5m': 300_000,
+    '15m': 900_000,
+    '30m': 1_800_000,
+    '1h': 3_600_000,
+    '90m': 5_400_000,
+    '4h': 14_400_000,
+    '1d': 86_400_000,
+    '1wk': 604_800_000,
+  }
+  return map[canonical] ?? null
+}
+
+function delayAteFechamentoConfirmado(canonical: string): number {
+  const ms = timeframeMs(canonical)
+  if (!ms) return 60_000
+  const now = Date.now()
+  const closeIn = ms - (now % ms)
+  return Math.max(5_000, closeIn + 5_000)
+}
+
 // ─── Agentes ──────────────────────────────────────────────────────────────────
 // IDs alinhados ao backend (api/main.py _FRONTEND_AGENT_FEATURE_MAP):
 //   ATLAS, MACRO, ORION, NEWS, TRENDS, FUND, SENTIMENT, SENTINEL, ARGUS, AEGIS
@@ -112,28 +136,27 @@ const AGENTES_BASE: Agente[] = [
 ]
 
 // ─── Ativos seed ──────────────────────────────────────────────────────────────
-// Símbolos TradingView usam BINANCE:<BASE>USDT — referência global líquida.
-// MERCADOBITCOIN:* não existe no TradingView; o preço em BRL vem do MB via API.
+// TradingView usa pares BRL quando existem; preço operacional e execução vêm do Mercado Bitcoin via API.
 const MB_ATIVOS_SEED: Ativo[] = [
-  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'BINANCE:BTCUSDT' },
-  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'BINANCE:ETHUSDT' },
-  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'BINANCE:SOLUSDT' },
-  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'BINANCE:BNBUSDT' },
-  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'BINANCE:XRPUSDT' },
-  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'BINANCE:ADAUSDT' },
-  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'BINANCE:DOTUSDT' },
-  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'BINANCE:AVAXUSDT' },
-  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'BINANCE:LINKUSDT' },
-  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'BINANCE:DOGEUSDT' },
-  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'BINANCE:LTCUSDT' },
-  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'BINANCE:MATICUSDT' },
-  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'BINANCE:UNIUSDT' },
-  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'BINANCE:ATOMUSDT' },
-  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'BINANCE:NEARUSDT' },
-  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'BINANCE:ALGOUSDT' },
-  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'BINANCE:SANDUSDT' },
-  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'BINANCE:MANAUSDT' },
-  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'BINANCE:FTMUSDT' },
+  { simbolo: 'BTC-BRL',   nome: 'Bitcoin',       categoria: 'L1',         tv: 'BINANCE:BTCBRL' },
+  { simbolo: 'ETH-BRL',   nome: 'Ethereum',      categoria: 'L1',         tv: 'BINANCE:ETHBRL' },
+  { simbolo: 'SOL-BRL',   nome: 'Solana',        categoria: 'L1',         tv: 'BINANCE:SOLBRL' },
+  { simbolo: 'BNB-BRL',   nome: 'BNB',           categoria: 'L1',         tv: 'BINANCE:BNBBRL' },
+  { simbolo: 'XRP-BRL',   nome: 'Ripple',        categoria: 'Altcoin',    tv: 'BINANCE:XRPBRL' },
+  { simbolo: 'ADA-BRL',   nome: 'Cardano',       categoria: 'L1',         tv: 'BINANCE:ADABRL' },
+  { simbolo: 'DOT-BRL',   nome: 'Polkadot',      categoria: 'L1',         tv: 'BINANCE:DOTBRL' },
+  { simbolo: 'AVAX-BRL',  nome: 'Avalanche',     categoria: 'L1',         tv: 'BINANCE:AVAXBRL' },
+  { simbolo: 'LINK-BRL',  nome: 'Chainlink',     categoria: 'Altcoin',    tv: 'BINANCE:LINKBRL' },
+  { simbolo: 'DOGE-BRL',  nome: 'Dogecoin',      categoria: 'Altcoin',    tv: 'BINANCE:DOGEBRL' },
+  { simbolo: 'LTC-BRL',   nome: 'Litecoin',      categoria: 'Altcoin',    tv: 'BINANCE:LTCBRL' },
+  { simbolo: 'MATIC-BRL', nome: 'Polygon',       categoria: 'L2',         tv: 'BINANCE:MATICBRL' },
+  { simbolo: 'UNI-BRL',   nome: 'Uniswap',       categoria: 'DeFi',       tv: 'BINANCE:UNIBRL' },
+  { simbolo: 'ATOM-BRL',  nome: 'Cosmos',        categoria: 'L1',         tv: 'BINANCE:ATOMBRL' },
+  { simbolo: 'NEAR-BRL',  nome: 'NEAR Protocol', categoria: 'L1',         tv: 'BINANCE:NEARBRL' },
+  { simbolo: 'ALGO-BRL',  nome: 'Algorand',      categoria: 'L1',         tv: 'BINANCE:ALGOBRL' },
+  { simbolo: 'SAND-BRL',  nome: 'The Sandbox',   categoria: 'Metaverso',  tv: 'BINANCE:SANDBRL' },
+  { simbolo: 'MANA-BRL',  nome: 'Decentraland',  categoria: 'Metaverso',  tv: 'BINANCE:MANABRL' },
+  { simbolo: 'FTM-BRL',   nome: 'Fantom',        categoria: 'L1',         tv: 'BINANCE:FTMBRL' },
   { simbolo: 'USDT-BRL',  nome: 'Tether',        categoria: 'Stablecoin', tv: 'BINANCE:USDTBRL' },
   { simbolo: 'USDC-BRL',  nome: 'USD Coin',      categoria: 'Stablecoin', tv: 'BINANCE:USDCUSDT' },
 ]
@@ -163,14 +186,21 @@ const API_BASE = ((): string => {
   return 'http://127.0.0.1:8010'
 })()
 
-/** Par MB (`BTC-BRL`) → segmento `POST /api/analyze/{asset}` como `BTCUSDT` (motor/yfinance). */
+/** Par MB (`BTC-BRL`) -> segmento `POST /api/analyze/{asset}` como `BTCBRL` (broker MB). */
 function mbSimboloParaAssetAnalyzePath(simboloMb: string): string {
   const s = simboloMb.trim().toUpperCase()
   const m1 = s.match(/^([A-Z0-9]+)-BRL$/)
-  if (m1) return `${m1[1]}USDT`
+  if (m1) return `${m1[1]}BRL`
   const compact = s.replace(/-/g, '')
-  if (compact.endsWith('BRL') && compact.length > 4) return `${compact.slice(0, -3)}USDT`
+  if (compact.endsWith('BRL') && compact.length > 4) return compact
   return compact
+}
+
+function simboloMbParaMarketPath(simboloMb: string): string {
+  const s = simboloMb.trim().toUpperCase().replace(/\//g, '-')
+  if (s.includes('-')) return s
+  if (s.endsWith('BRL') && s.length > 3) return `${s.slice(0, -3)}-BRL`
+  return `${s}-BRL`
 }
 
 /** URL completa POST /api/analyze/{asset} (asset sempre no path; encodeURIComponent). */
@@ -439,13 +469,29 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ativoSelecionado, timeframe])
 
-  // Preço simulado em tempo real
+  // Preço real do Mercado Bitcoin: a tela operacional deve refletir o mesmo mercado da execução.
   useEffect(() => {
-    const id = setInterval(() => {
-      setPrecoAtual(p => +(p + (Math.random() - 0.48) * 180).toFixed(2))
-    }, 2000)
+    let cancelled = false
+    const carregarPreco = async () => {
+      try {
+        const market = simboloMbParaMarketPath(ativoSelecionado.simbolo)
+        const r = await fetch(`${API_BASE}/api/market/mb/ticker?asset=${encodeURIComponent(market)}`, {
+          signal: AbortSignal.timeout(8000),
+        })
+        if (!r.ok || cancelled) return
+        const j = await r.json()
+        const last = Number(j.data?.last)
+        if (Number.isFinite(last) && last > 0) {
+          setPrecoAtual(+last.toFixed(2))
+        }
+      } catch {
+        /* Mantem ultimo preco valido. */
+      }
+    }
+    carregarPreco()
+    const id = setInterval(carregarPreco, 5000)
     return () => clearInterval(id)
-  }, [])
+  }, [ativoSelecionado.simbolo])
 
   // Carregar lista completa de ativos MB
   useEffect(() => {
@@ -463,8 +509,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
               simbolo: s,
               nome: base,
               categoria: 'Outro',
-              // Default: BINANCE:<BASE>USDT (símbolo TradingView validado).
-              tv: `BINANCE:${base}USDT`,
+              // Default visual: par BRL no TradingView quando existir; operacional vem do MB.
+              tv: `BINANCE:${base}BRL`,
             }
           })
         setAtivos([...MB_ATIVOS_SEED, ...extras])
@@ -707,17 +753,18 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   useEffect(() => {
     let cancelled = false
     let nextTimer: ReturnType<typeof setTimeout> | null = null
+    const tfRowLoop = resolveTfRow(tfCatalog, timeframe)
 
-    // Agendamento recursivo: só agenda a próxima quando a atual TERMINA.
-    // Garante que nunca há duas chamadas concorrentes (que causariam loops sobrepostos).
-    const loop = async () => {
+    // Primeira leitura ao abrir/trocar ativo; depois só no fechamento confirmado da vela do timeframe.
+    // Isso evita "repaint" visual e score oscilando a cada 60s no meio de um candle M15/H1.
+    const executarEAgendar = async () => {
       if (cancelled) return
       await buscarAnalise(ativoSelecionado.simbolo, timeframe)
       if (cancelled) return
-      nextTimer = setTimeout(loop, 60_000)
+      nextTimer = setTimeout(executarEAgendar, delayAteFechamentoConfirmado(tfRowLoop.canonical))
     }
 
-    loop()
+    executarEAgendar()
 
     return () => {
       cancelled = true
@@ -900,6 +947,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     ? (((precoAtual - operacaoAtiva.precoEntrada) / operacaoAtiva.precoEntrada) * 100
        * (operacaoAtiva.direcao === 'VENDA' ? -1 : 1)).toFixed(2)
     : '0.00'
+  const podeAutoReal =
+    Boolean(mesaExecContext?.copyTradeEnabled && mesaExecContext?.brokerReady && mesaExecContext?.mode === 'live')
 
   // AEGIS real (sem cair em mock da operação simulada para não enganar o utilizador).
   const scoreFinal = agentes.find(a => a.id === 'AEGIS')?.score ?? null
@@ -1153,10 +1202,17 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                 <div>
                   <div className={styles.modoAutoLabel}>Modo automatico</div>
                   <div className={styles.modoAutoSub}>
-                    {modoAutomatico ? 'Sistema executa sem aprovacao manual' : 'Voce aprova cada operacao'}
+                    {modoAutomatico
+                      ? (podeAutoReal ? 'Sistema pode executar no Mercado Bitcoin' : 'Auto visual ligado; execucao real bloqueada pela mesa')
+                      : 'Voce aprova cada operacao'}
                   </div>
                 </div>
                 <button className={`${styles.toggle} ${modoAutomatico ? styles.toggleOn : ''}`}
+                  title={
+                    podeAutoReal
+                      ? 'Automático real habilitado: live + broker pronto + copy trade on.'
+                      : 'Protecao: automatico real exige UNI_IA_MODE=live, broker pronto e COPY_TRADE_ENABLED=true.'
+                  }
                   onClick={() => setModoAutomatico(m => !m)}>
                   <span className={styles.toggleThumb} />
                 </button>

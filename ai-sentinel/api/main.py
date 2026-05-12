@@ -18,6 +18,7 @@ from api.copy_trade import CopyTradeService
 from api.desk import PrivateDesk
 from api.signal_scanner import SignalScanner
 from api.security import require_admin_token
+from adapters.mercadobitcoin_market import get_candles as mb_get_candles, get_ticker as mb_get_ticker, normalize_mb_market
 from core.chart_timeframes import normalize_chart_timeframe, public_timeframes_catalog
 from core.daily_ops_report import DailyOpsReportService
 from core.kill_switch import KillSwitchService
@@ -503,6 +504,24 @@ def analyze_asset(asset: str, body: Optional[AnalyzeRequestBody] = Body(default=
 def meta_chart_timeframes():
     """Timeframes suportados pelo motor, alinhados ao embed TradingView."""
     return {"success": True, "items": public_timeframes_catalog()}
+
+
+@app.get("/api/market/mb/ticker", tags=["Mercado"])
+def market_mb_ticker(asset: str):
+    try:
+        market = normalize_mb_market(asset)
+        return {"success": True, "data": mb_get_ticker(market)}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/market/mb/candles", tags=["Mercado"])
+def market_mb_candles(asset: str, granularity: int = 900, limit: int = 120):
+    try:
+        market = normalize_mb_market(asset)
+        return {"success": True, "data": {"market": market, "candles": mb_get_candles(market, granularity, limit)}}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.get("/api/performance/asset-hit-ranking", tags=["Performance"])

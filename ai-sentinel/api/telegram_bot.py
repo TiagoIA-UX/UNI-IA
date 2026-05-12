@@ -1,6 +1,8 @@
+import html
 import os
 import time
 from typing import Dict, Optional
+
 import requests
 from core.schemas import OpportunityAlert
 
@@ -35,19 +37,21 @@ class UniIATelegramBot:
         if missing:
             raise RuntimeError(f"Telegram nao configurado. Variaveis faltando: {', '.join(missing)}")
 
-    def _post_message(self, token: str, chat_id: str, message: str):
+    def _post_message(self, token: str, chat_id: str, message: str, parse_mode: Optional[str] = "HTML"):
         last_err = None
         base_url = f"https://api.telegram.org/bot{token}"
         for attempt in range(1, self.max_retries + 1):
             try:
+                payload = {
+                    "chat_id": chat_id,
+                    "text": message,
+                    "disable_web_page_preview": True,
+                }
+                if parse_mode:
+                    payload["parse_mode"] = parse_mode
                 response = requests.post(
                     f"{base_url}/sendMessage",
-                    json={
-                        "chat_id": chat_id,
-                        "text": message,
-                        "parse_mode": "Markdown",
-                        "disable_web_page_preview": True,
-                    },
+                    json=payload,
                     timeout=self.timeout_seconds,
                 )
                 if response.ok:
@@ -63,7 +67,7 @@ class UniIATelegramBot:
     def send_admin_message(self, chat_id: str, message: str):
         if not self.bot_token:
             raise RuntimeError("TELEGRAM_BOT_TOKEN nao configurado para comandos administrativos.")
-        self._post_message(self.bot_token, chat_id, message)
+        self._post_message(self.bot_token, chat_id, message, parse_mode=None)
         
     def dispatch_alert(self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None):
         """
@@ -84,14 +88,18 @@ class UniIATelegramBot:
             self._send_to_free(alert, operational_context)
             
     def _format_message(self, alert: OpportunityAlert, is_premium: bool, operational_context: Optional[Dict[str, str]] = None) -> str:
-        """Formata o output segundo as boas práticas da plataforma com Markdown"""
+        """Formata o alerta em HTML (parse_mode HTML) com escape de conteudo dinamico."""
+        def esc(s: object) -> str:
+            return html.escape(str(s) if s is not None else "", quote=False)
+
         classification_badges = {
             "RISCO": "🔴 RISCO",
             "ATENÇÃO": "🟠 ATENCAO",
             "ATENCAO": "🟠 ATENCAO",
             "OPORTUNIDADE": "🟢 OPORTUNIDADE",
         }
-        badge = classification_badges.get(alert.classification, f"⚪ {alert.classification}")
+        raw_class = alert.classification or ""
+        badge = classification_badges.get(raw_class, f"⚪ {esc(raw_class)}")
         strategy = alert.strategy
         direction = strategy.direction.upper() if strategy and strategy.direction else "FLAT"
         timeframe = strategy.timeframe if strategy and strategy.timeframe else "N/D"
@@ -107,38 +115,39 @@ class UniIATelegramBot:
             "SHORT": "🔴 SHORT",
             "FLAT": "⚪ FLAT",
         }
-        direction_label = direction_badges.get(direction, direction)
+        direction_label = direction_badges.get(direction, esc(direction))
 
         lines = [
-            "⚡ *UNI IA Signal Desk*",
-            f"Ativo: *{alert.asset}*",
-            f"Direcao: *{direction_label}*",
-            f"Timeframe: *{timeframe}*",
-            f"Modo: *{mode}*",
-            f"Status: *{badge}*",
-            f"Score: *{alert.score:.1f}/100*",
-            f"Operacional: *{operational_status}*",
+            "⚡ <b>UNI IA Signal Desk</b>",
+            f"Ativo: <b>{esc(alert.asset)}</b>",
+            f"Direcao: <b>{esc(direction_label)}</b>",
+            f"Timeframe: <b>{esc(timeframe)}</b>",
+            f"Modo: <b>{esc(mode)}</b>",
+            f"Status: <b>{esc(badge)}</b>",
+            f"Score: <b>{alert.score:.1f}/100</b>",
+            f"Operacional: <b>{esc(operational_status)}</b>",
         ]
 
         if strategy and strategy.execution_hint:
-            lines.append(f"Execucao: {strategy.execution_hint}")
+            lines.append(f"Execucao: {esc(strategy.execution_hint)}")
 
         lines.append("")
-        lines.append(f"🧠 *Leitura:* {alert.explanation}")
+        expl = alert.explanation or ""
+        lines.append(f"🧠 <b>Leitura:</b> {esc(expl)}")
 
         if strategy and strategy.reasons:
             lines.append("")
-            lines.append("📊 *Confluencias:*")
+            lines.append("📊 <b>Confluencias:</b>")
             for reason in strategy.reasons:
-                lines.append(f"- {reason}")
+                lines.append(f"- {esc(reason)}")
 
         if is_premium:
             lines.append("")
-            lines.append("💎 *Fluxo Premium Ativado*")
-        
+            lines.append("💎 <b>Fluxo Premium Ativado</b>")
+
         if alert.position_reversal_alert:
             lines.append("")
-            lines.append(f"🚨 *REVERSAO:* {alert.position_reversal_alert}")
+            lines.append(f"🚨 <b>REVERSAO:</b> {esc(alert.position_reversal_alert)}")
 
         return "\n".join(lines)
 
