@@ -32,6 +32,9 @@ run_backend.py
 run_uni_ia.py
 start_uni_ia.py
 
+# Export local de backtest (evita `git status` com Permission denied em pastas criadas pela IDE/outro user)
+ai-sentinel/backtest-export-*/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -49,11 +49,36 @@ class PrivateDesk:
     def _audit_required(self) -> bool:
         return self._runtime_mode() in {"approval", "live"}
 
+    @staticmethod
+    def _env_flag_true(value: Optional[str]) -> bool:
+        if value is None or not str(value).strip():
+            return False
+        return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+    @staticmethod
+    def _env_flag_false(value: Optional[str]) -> bool:
+        if value is None or not str(value).strip():
+            return False
+        return str(value).strip().lower() in ("0", "false", "no", "off")
+
     def _cfg(self) -> Dict[str, Any]:
         allowed_raw = os.getenv("DESK_ALLOWED_ASSETS", "")
         allowed_assets = [a.strip().upper() for a in allowed_raw.split(",") if a.strip()]
         mode = self.system_state.mode.value if self.system_state else os.getenv("UNI_IA_MODE", "paper").lower()
-        require_approval = os.getenv("UNI_IA_REQUIRE_APPROVAL", "true").lower() == "true"
+
+        # INSTALLATION/.env.example documentam DESK_REQUIRE_MANUAL_APPROVAL; quando definido,
+        # prevalece sobre UNI_IA_REQUIRE_APPROVAL (alias legível da mesma regra).
+        desk_raw = os.getenv("DESK_REQUIRE_MANUAL_APPROVAL", "").strip()
+        if desk_raw != "":
+            if self._env_flag_true(desk_raw):
+                require_approval = True
+            elif self._env_flag_false(desk_raw):
+                require_approval = False
+            else:
+                require_approval = os.getenv("UNI_IA_REQUIRE_APPROVAL", "true").lower() == "true"
+        else:
+            require_approval = os.getenv("UNI_IA_REQUIRE_APPROVAL", "true").lower() == "true"
+
         return {
             "mode": mode,
             "manual_approval": require_approval or mode == "approval",

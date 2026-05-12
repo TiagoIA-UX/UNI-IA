@@ -146,6 +146,8 @@ class DeskAndScannerTests(unittest.TestCase):
         self.base_env = {
             "DESK_MIN_SCORE": "75",
             "DESK_ALLOWED_ASSETS": "BTCUSDT",
+            # Isola suite do ambiente do SO: quando definido, vale mais que UNI_IA_REQUIRE_APPROVAL
+            "DESK_REQUIRE_MANUAL_APPROVAL": "",
             "UNI_IA_REQUIRE_APPROVAL": "true",
             "SIGNAL_MIN_SCORE": "75",
             "SIGNAL_ALLOWED_CLASSIFICATIONS": "OPORTUNIDADE",
@@ -224,6 +226,37 @@ class DeskAndScannerTests(unittest.TestCase):
 
         self.assertEqual(preview["action"], "blocked")
         self.assertIn("Execucao real bloqueada", preview["operational_status"])
+
+    def test_desk_require_manual_approval_overrides_uni_ia_when_set(self):
+        """INSTALLATION refere DESK_REQUIRE_MANUAL_APPROVAL; deve prevalecer se definido."""
+        with patch.dict(
+            "os.environ",
+            {
+                **self.base_env,
+                "UNI_IA_MODE": "live",
+                "UNI_IA_REQUIRE_APPROVAL": "false",
+                "DESK_REQUIRE_MANUAL_APPROVAL": "true",
+            },
+            clear=False,
+        ):
+            desk, _ = self._build_desk("live", "ready")
+            cfg = desk.status()["desk"]
+        self.assertTrue(cfg["manual_approval"])
+
+    def test_desk_require_false_turns_off_manual_when_explicit(self):
+        with patch.dict(
+            "os.environ",
+            {
+                **self.base_env,
+                "UNI_IA_MODE": "live",
+                "UNI_IA_REQUIRE_APPROVAL": "true",
+                "DESK_REQUIRE_MANUAL_APPROVAL": "false",
+            },
+            clear=False,
+        ):
+            desk, _ = self._build_desk("live", "ready")
+            cfg = desk.status()["desk"]
+        self.assertFalse(cfg["manual_approval"])
 
     def test_scanner_locked_returns_blocked(self):
         state = SystemStateManager(UniIAMode.LIVE)

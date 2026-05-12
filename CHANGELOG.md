@@ -12,6 +12,22 @@ A versionagem segue [Semantic Versioning](https://semver.org/lang/pt-BR/) onde a
 
 ---
 
+## [1.3.2] — 2026-05-12
+
+### Corrigido
+
+- Mesa (`PrivateDesk`): quando **`DESK_REQUIRE_MANUAL_APPROVAL`** está definida no ambiente, **prevalece** sobre **`UNI_IA_REQUIRE_APPROVAL`**, alinhando código a `.env.example` / `INSTALLATION.md`; valores não reconhecidos fazem fallback seguro para `UNI_IA_REQUIRE_APPROVAL`.
+
+### Alterado
+
+- **`.gitignore`:** entrada `ai-sentinel/backtest-export-*/` para evitar falhas de permissão em `git status`; mantidas regras de SO e scripts temporários na raiz.
+
+### Testes
+
+- Novos casos em `tests/test_desk_and_scanner.py` e isolamento em `base_env` (`DESK_REQUIRE_MANUAL_APPROVAL=""`) para evitar vazamento do ambiente do SO nas suites.
+
+---
+
 ## [1.3.1] — 2026-05-12
 
 ### Documentação e governança (README)
