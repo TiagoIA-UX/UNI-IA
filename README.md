@@ -1,248 +1,219 @@
-🔥 Boitatá IA Investimentos
-> **Gestão de Investimentos com Governança Institucional, Auditoria Completa e Identidade Brasileira**
-Boitatá IA é um sistema de inteligência artificial para gestão de investimentos que toma decisões com rigor institucional, controle de risco obsessivo e transparência total — guiado por um conselho de guardiões inspirados na fauna símbolo dos estados brasileiros.
-🔥 Conselho Guardião: 8+ agentes especializados, cada um nomeado com o animal símbolo do seu estado
-📊 Governança Corporativa: Fluxo de aprovação, auditoria contínua, ciclos de risco
-🔐 Auditoria DBA-Grade: Rastreabilidade 100% de cada decisão, transação e erro
-🌿 Dízimo Amazônia: 10% do lucro líquido destinado à conservação das espécies do conselho
-Princípio Fundador
-✅ Caixa primeiro — operação lucrativa é obrigação, não objetivo futuro
-✅ Pesquisa aplicada depois — P&D com ROI definido antes de iniciar
-✅ Risco sempre controlado — nunca supera 1–3% por posição
-Boitatá IA — Crescimento com Governança, não com Improviso
+# Boitatá IA — Suporte institucional à decisão em investimentos
 
-### Módulo DOC (experimental, fase de desenvolvimento)
-
-- **`boitata-doc/`** — pacote Python de apoio (apuração documental, exports, NAO simbólica).
-- **`ai-sentinel`** — integração **opcional**: `DOC_LEDGER_ENABLED=true` grava uma linha JSON por cada ordem bem-sucedida do copy trade / mesa (`core/doc_ledger.py` → ficheiro configurável; padrão Windows `C:\BoitataDOC\data\doc_ledger.jsonl`). O campo **`hint_fiscal_preliminar`** é só indício (timeframe do contexto); **day trade vs swing** para efeitos tributários exige **conferência de calendário abertura/fecho** e orientação profissional.
-- **Política de release:** desenvolvimento ativo. **Antes** de operação real em produção, será publicado um **release** com notas de risco e checklist. Tags `v*-doc-*` marcam marcos técnicos DOC/ledger — **não** constituem homologação para investimento.
-- Procedimentos: `boitata-doc/docs/PROCEDIMENTOS-TESTE-AUDITORIA.md` · script ACL `boitata-doc/scripts/win/ensure-boitatadoc-admin-c-drive.ps1`.
+**Repositório:** [TiagoIA-UX/UNI-IA](https://github.com/TiagoIA-UX/UNI-IA)
 
 ---
-🚀 Quick Start (5 minutos)
+
+## 1. Sumário para auditoria e due diligence
+
+| Domínio | Descrição |
+|--------|-----------|
+| **Natureza do software** | Sistema de suporte à decisão (orquestração de agentes, governança, registo auditável). **Não** constitui recomendação financeira automatizada nem substitui assessoria jurídica, contábil ou tributária. |
+| **Estado de maturidade** | **Desenvolvimento ativo.** Antes de operação relevante em **conta real**, deve existir **release** documentado com notas de risco e checklist operacional. |
+| **Rastreabilidade** | Eventos operacionais persistidos (ex.: auditoria, mesa, *logs* JSONL conforme configuração). Módulo **DOC** (`boitata-doc/`) e *ledger* opcional (`DOC_LEDGER_*`) destinam-se a **evidência técnica pré-contábil**, sem integração automática com programas oficiais da RFB. |
+| **Dados pessoais** | Conformidade com bases legais aplicáveis (ex.: LGPD 13.709/2018), políticas do *deploy* e contratos de subscrição de serviços utilizados. |
+| **Mercado de valores mobiliários / criptoativos** | Referências regulatórias indicativas no aviso de risco (secção 12). O operador mantém responsabilidade pelo enquadramento da atividade e pelas obrigações acessórias. |
+
+---
+
+## 2. Visão geral do produto
+
+Boitatá IA é uma plataforma de **governança e orquestração** de múltiplos agentes analíticos (macro, técnico, notícias, sentimento, risco, etc.), com **fluxos de aprovação**, **modos operacionais** (*paper* / *approval* / *live*) e **trilhas de auditoria**.
+
+**Princípios declarados:**
+
+- Operação com **capital preservado**: limites por posição e mecanismos de *kill-switch*, conforme configuração.
+- **Transparência operacional**: rejeições e estados registados quando os subsistemas estão ativos.
+- **P&D condicionado a governança** e disponibilidade de caixa institucional (objetivos de produto).
+
+---
+
+## 3. Transparência fiscal e módulo DOC (experimental)
+
+- **`boitata-doc/`** — pacote com modelos documentais (`EntradaDOC`, exportações CSV/JSON, NAO conceitual) para trabalho paralelo ao motor de execução.
+- **`DOC_LEDGER_ENABLED` / `DOC_LEDGER_PATH`** — *ledger* JSONL **opcional** no `ai-sentinel` (`core/doc_ledger.py`): regista, após execuções bem-sucedidas no broker, metadados com **indício** de contexto temporal (*hint* DAY/SWING). A **matéria de facto tributária** (abertura/fecho, competência mensal, isenções) exige **conferência** com extratos da corretora e **profissional habilitado** (contador/advogado tributarista conforme caso).
+- Procedimentos operacionais: `boitata-doc/docs/PROCEDIMENTOS-TESTE-AUDITORIA.md`.
+- Script de permissões pasta `C:\` (uso administrativo local): `boitata-doc/scripts/win/ensure-boitatadoc-admin-c-drive.ps1`.
+
+---
+
+## 4. Identidade institucional: Conselho Guardião (metáfora analítica)
+
+**Conselho Guardião** designa uma **estrutura lógica** de especialização: cada agente **associa nomenclatura** inspirada na **fauna-símbolo** dos Estados brasileiros unicamente como **rótulos de papel analítico** (macro, técnico, liquidez, narrativa etc.).
+
+**Não se infere obrigação jurídica** de destinarem-se automaticamente valores a instituições de conservação pela mera nomenclatura. Qualquer política **voluntária** de financiamento a causas sociais ou ambientais é **atitude da entidade operadora**, **posterior ao cumprimento de obrigações legais, trabalhistas e fiscais**, e **sujeita a documentação própria** (contratos, recibos, pareceres).
+
+### 4.1 Política de destinação a proteção animal (marco institucional)
+
+Alinhável a objetivos corporativos de responsabilidade social, o projeto trabalha internamente com **meta facultativa de destinação de até 6% (seis por cento)** de recursos **líquidos disponíveis** (após impostos, encargos e reservas legais exigíveis) a **entidades ou mecanismos competentes** dedicados à **proteção animal**, **desde que** (i) haja **base legal e regulamentação vigentes** que permitam a operação; (ii) exista **due diligence** da entidade beneficiária; (iii) a **contabilidade** reconheça o dispêndio nos termos aplicáveis.
+
+**Referência legislativa em tramitação (consulta obrigatória ao texto e situação atual no site oficial):**
+
+- **PL 3.726/2023** (Senado Federal) — projeto que, conforme relatórios parlamentares e imprensa especializada em trâmite até 2026, objetiva autorizar deduções no âmbito do IRPF relacionadas a doações para fins de proteção animal.  
+  **Página oficial da matéria:** [Senado Federal — materia 158929](https://www25.senado.leg.br/web/atividade/materias/-/materia/158929).
+
+**Aclarações:**
+
+- Projeto não sancionado **não gera direito nem obrigação** automática; o texto pode ser alterado na tramitação.
+- O software **não automatiza pagamentos** nem concilia obrigações acessórias perante a RFB relativamente a essa meta; eventual implementação será **explicitada em versão estável**, com registos compatíveis com auditoria.
+
+---
+
+## 5. Provedores de IA externa (incl. Forge Ops AI)
+
+- **Groq:** utilizado através de cliente configurável no *backend* (`GROQ_API_KEY` etc.), conforme `ai-sentinel` e `.env.example`.
+- **Forge Ops AI / ForgeOps:** **não existe integração técnica** (dependências, chamadas SDK ou URLs) nos pacotes `ai-sentinel` e `zairyx-frontend` deste repositório. Menções passadas a “proveedor alternativo” constituem **referência de roadmap ou documentação legada** e **não** representam funcionalidade ativa até implementação e documentação de release.
+
+---
+
+## 6. Quick start (desenvolvimento local)
+
 ```bash
-# 1. Clone
 git clone https://github.com/TiagoIA-UX/UNI-IA.git
 cd UNI-IA
-
-# 2. Configure
 cp .env.example .env.local
-# Preencha com suas chaves (Supabase, Groq, Telegram)
+# Preencha chaves (Supabase, Groq, Telegram, broker, etc.)
 
-# 3. Backend
 cd ai-sentinel
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 python run_local_api.py
 
-# 4. Frontend (novo terminal)
-cd zairyx-frontend
+cd ../zairyx-frontend
 npm install
 npm run dev
-
-# 5. Acesse http://localhost:3000 ✅
+# http://localhost:3000
 ```
-Primeira vez? Veja o Guia Completo de Instalação.
+
 ---
-📦 Releases
+
+## 7. Releases e política de versionamento
+
 ```bash
-git tag                          # listar versões
-git checkout v1.2.0              # usar versão específica
+git tag
+git checkout v1.2.0
 ```
-Cadência: Patch (bug/hotfix) · Minor (novos agentes/mercados) · Major (arquitetura/governança)
+
+- **Cadência desejada:** *patch* (correção), *minor* (funcionalidades), *major* (*breaking* ou governança).
+- Marcos do módulo DOC: tags `v*-doc-*` (ex.: pré-release **`v1.3.0-doc-beta`**) indicam estado do **instrumento documental**, **não** homologação de investimento nem certificação regulatória.
+- Lista e notas em: [GitHub Releases](https://github.com/TiagoIA-UX/UNI-IA/releases).
+
 ---
-💡 Diferenciais
-Vs. robo-traders genéricos
-❌ Genéricos: "Compra quando X cruza Y" — sem contexto, sem risco
-✅ Boitatá IA: Conselho de 8 guardiões analisa macro, técnico, sentimento e notícias em consenso
-Vs. "black boxes" de IA
-❌ Black box: "A máquina decidiu" — sem auditoria, sem responsabilidade
-✅ Boitatá IA: Cada voto de cada guardião é rastreável, cada rejeição explicada
-Vs. sistemas sem governança
-❌ Sem governança: crescer rápido, falhar misteriosamente
-✅ Boitatá IA: Gates obrigatórios, ciclos auditáveis, kill-switch automático
----
-🦅 O Conselho Guardião
-Cada agente carrega o espírito do animal símbolo do seu estado. Cada operação lucrativa financia a preservação dessas espécies via Dízimo Amazônia.
+
+## 8. Arquitetura resumida: fluxo decisório
+
 ```
-ENTRADA (Mercado Real)
-    ↓
-┌──────────────────────────────────────────────────────┐
-│  CONSELHO GUARDIÃO (Especialistas Independentes)     │
-├──────────────────────────────────────────────────────┤
-│  🦅 Harpia        · DF · Contexto macroeconômico    │
-│  🐆 Onça-Pintada  · MT · Análise técnica            │
-│  🐬 Boto          · AM · Sentimento de mercado      │
-│  🦜 Arara Azul    · MS · Notícias e eventos         │
-│  🦢 Tuiuiú        · MS · Volume e fluxo             │
-│  🦃 Seriema       · MG · Narrativa econômica        │
-│  🐜 Tamanduá      · GO · Fundamentos do ativo       │
-│  🐟 Peixe-Boi     · AM · Monitoramento de posição   │
-└──────────────────────────────────────────────────────┘
-    ↓ (Ponderação com pesos variáveis)
-┌──────────────────────────────────────────────────────┐
-│  🔥 BOITATÁ — Orquestrador Supremo · AM             │
-│  → Score agregado 0–100                             │
-│  → Classificação: OPORTUNIDADE / NEUTRO / RISCO     │
-│  → Direção: COMPRA / VENDA / AGUARDAR               │
-└──────────────────────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────────────────────┐
-│  🐢 JABUTI — Gate de Risco · PA                     │
-│  ✓ Score ≥ 75                                       │
-│  ✓ Ativo em whitelist                               │
-│  ✓ Drawdown dentro do limite                        │
-│  ✓ Aprovação manual (quando ativado)                │
-│  ✓ Auditoria em tempo real                          │
-└──────────────────────────────────────────────────────┘
-    ↓
-┌──────────────────────────────────────────────────────┐
-│  🐦 Quero-Quero — Monitoramento · RS                │
-│  → Acompanha outcome real vs. esperado              │
-│  → Aciona reversão e feedback para o próximo ciclo  │
-└──────────────────────────────────────────────────────┘
-    ↓
-SAÍDA (Operação Aprovada ou Vetada)
+ENTRADA (dados de mercado e operador)
+       ↓
+┌──────────────────────────────────────────────────────────────┐
+│  CONSELHO GUARDIÃO — agentes analíticos (metáfora regional) │
+│  (ex.: harpia/macroeconomia, onça/técnico, boto/sentimento) │
+└──────────────────────────────────────────────────────────────┘
+       ↓ ponderação agregada
+┌──────────────────────────────────────────────────────────────┐
+│  ORQUESTRADOR — score, classificação, direção sugerida       │
+└──────────────────────────────────────────────────────────────┘
+       ↓ *gates* de risco e modo operacional
+┌──────────────────────────────────────────────────────────────┐
+│  MESA / COPY TRADE — conforme UNI_IA_MODE e configuração   │
+└──────────────────────────────────────────────────────────────┘
+       ↓
+SAÍDA (ordem vetada, pendente de aprovação ou executada com log)
 ```
-Referência completa: AGENTES_GUARDIAO.md
-Cada passo é auditável. Nada é silencioso.
+
+Documentação detalhada dos agentes: `AGENTES_GUARDIAO.md`.
+
 ---
-🌿 Dízimo Amazônia
-10% do lucro líquido operacional é destinado à conservação das espécies que compõem o conselho. O sistema rastreia e exibe esse valor em tempo real na interface da plataforma.
-Espécies do conselho ameaçadas: Harpia (vulnerável) · Onça-Pintada (vulnerável) · Boto (ameaçado) · Arara Azul (vulnerável) · Jabuti (vulnerável) · Peixe-Boi (criticamente ameaçado) · Tamanduá-Bandeira (vulnerável)
+
+## 9. Resiliência de LLM
+
+Em falha repetida do provedor primário:
+
+- Fluxo pode ser interrompido conforme política implementada (*Mandato Zero Bug* onde aplicável).
+- Alertas para canal administrativo (Telegram), quando parametrizados.
+- Registo em tabela/eventos de auditoria com tipo explícito (ex.: falha LLM).
+
+Variáveis de exemplo: `LLM_FALLBACK_*` em `.env.example`.
+
 ---
-🔄 Resiliência de LLM
-Quando o provedor de LLM primário (Groq) retorna erro consecutivo, o sistema não falha silenciosamente:
-Pipeline interrompe o fluxo operacional (Mandato Zero Bug)
-Alerta disparado via Telegram para o canal administrativo
-Estado registrado em `uni_ia_operational_audit` com `event_type = 'llm_failure'`
-Operações pendentes aguardam na fila até restabelecimento
-```dotenv
-LLM_FALLBACK_ALERT_ENABLED=true
-LLM_FALLBACK_MAX_RETRIES=3
-LLM_FALLBACK_RETRY_INTERVAL_SECONDS=30
-```
-Integração com provedor LLM alternativo rastreada em: ForgeOps-AI
+
+## 10. Governança em camadas (resumo)
+
+- **Capital / risco:** limites por posição e circuit breakers parametrizados.
+- **Gates decisórios:** score mínimo, *whitelist*, modo operacional (*paper* vs *live*), aprovação manual opcional.
+
 ---
-📊 Governança em Camadas
-Capital Allocation
-```
-Portfolio Total: [definido pelo operador]
-├─ Max por posição: 1–3% do capital total
-├─ Max por dia:     Drawdown 5% → kill-switch
-├─ Max por semana:  Drawdown 10% → revisão estratégica
-└─ Rebalanceio:     Semanal com aprovação manual
-```
-Decision Gates
-```
-Nível 1: Score ≥ 75 → Passa | Score < 75 → Rejeitado (sem exceção)
-Nível 2: Whitelist + modo + drawdown → Passa | Falha → Rejeitado
-Nível 3: Aprovação manual? → Aguarda Telegram | Não → Executa com log
-Nível 4: Auditoria pós-execução + reconciliação + feedback
-```
+
+## 11. Rastreabilidade e artefactos típicos
+
+| Artefacto | Conteúdo indicativo |
+|-----------|---------------------|
+| `uni_ia_operational_audit` | Decisões, rejeições, execuções, falhas sistémicas (quando integração BD ativa) |
+| Mesas (*desk*) | Pedidos de aprovação, histórico de decisões |
+| `signal_dispatch` (JSONL) | Sinais transmitidos (retenção conforme política) |
+| `risk_events` (JSONL) | Eventos de *kill-switch* e limites |
+| `doc_ledger.jsonl` (opcional) | Metadados pós-ordem para cruzamento com DOC |
+
 ---
-🔐 Auditoria DBA-Grade
-Tabela	O que rastreia	Retenção
-`uni_ia_operational_audit`	Decisões, rejeições, execuções, falhas de LLM	Indefinida
-`uni_ia_desk_requests`	Fila de aprovação com timestamps	Indefinida
-`zairyx_alerts_history`	Score e classificação final	12 meses
-`uni_ia_events`	A/B testing de UI/UX	12 meses
-`signal_dispatch` (JSONL)	Cada sinal transmitido	6 meses
-`risk_events` (JSONL)	Kill-switch, limite violado	Indefinida
-`feedback_store` (JSONL)	Outcome real vs. esperado	24 meses
-```sql
-SELECT * FROM uni_ia_operational_audit
-WHERE created_at > NOW() - INTERVAL '7 days'
-AND event_type IN ('decision', 'rejection', 'approval', 'execution', 'llm_failure')
-ORDER BY created_at DESC;
-```
+
+## 12. Documentação complementar
+
+| Recurso | Público-alvo |
+|---------|----------------|
+| `INSTALLATION.md` | Primeira instalação |
+| `AGENTES_GUARDIAO.md` | Conselho e papéis |
+| `boitata-doc/README.md` | Módulo DOC |
+| `schema.sql` | Base de dados |
+| `.env.example` | Variáveis de ambiente |
+
 ---
-📖 Documentação
-Recurso	Para quem	Quando ler
-INSTALLATION.md	Iniciantes	Primeira instalação
-AGENTES_GUARDIAO.md	Todos	Entender o conselho
-README.md	Devs experientes	Arquitetura geral
-schema.sql	DBAs	Customizar banco
-.env.example	Todos	Configurar variáveis
+
+## 13. Roadmap (indicativo)
+
+| Fase | Itens |
+|------|--------|
+| **Atual** | Conselho multi-agente, governança em camadas, modos *paper* / *approval* / *live*, auditoria, alertas de LLM, módulo DOC experimental |
+| **Curto prazo** | Latência, cobertura de ativos, refino de pesos com *feedback* |
+| **Médio prazo** | Estratégias e *multi-timeframe* documentados em release |
+| **Futuro** | APIs B2B / analytics (sujeito a licenciamento BUSL) |
+
 ---
-🎓 Roadmap
-Fase 1 — Fundação (Atual ✅)
-✅ Conselho Guardião com 8+ agentes votando
-✅ Governança em camadas com gates obrigatórios
-✅ Modo paper + approval + live
-✅ Auditoria rastreável 100%
-✅ Alerta de falha de LLM via Telegram
-✅ Identidade Boitatá IA + Dízimo Amazônia
-Fase 2 — Eficiência (Q3 2026)
-📅 Latência de análise: ~5s → <1s
-📅 Cobertura de ativos: 3x+ pares
-📅 Fine-tuning de pesos com feedback real
-Fase 3 — Escala (Q4 2026+)
-📅 Múltiplas estratégias (swing, scalping, mean reversion)
-📅 Multi-timeframe (1h, 4h, daily)
-📅 Provedor LLM alternativo automatizado
-Fase 4 — Monetização Adjacente (2027)
-📅 API de análise B2B
-📅 Dashboard de analytics SaaS
-📅 Consultoria para fundos e family offices
----
-🤝 Contribuindo
+
+## 14. Contribuição e padrão de commits
+
 ```bash
-# Bug
-git checkout -b bugfix/descricao-breve
-git push origin bugfix/descricao-breve
-# Abra PR para main
-
-# Feature: abra uma Issue primeiro, descreva o problema e o impacto de negócio
+git checkout -b fix/descricao-curta
+# PR para main; *issues* para *features* com impacto de negócio
 ```
-Padrão de commits: `feat:` · `fix:` · `docs:` · `refactor:` · `perf:` · `test:` · `chore:`
----
-⚙️ Princípios Operacionais e Mandato Zero Bug
-Dados reais obrigatórios — sem placeholder em execução
-Gate por camadas: dados → estratégia → risco → integração → auditoria
-Modo `paper` por padrão; liberação gradual para `live`
-Zero comportamento silencioso — falha de LLM dispara alerta imediato
-Zero fallback operacional — score só existe com payload válido
-Zero execução sem validação — todos os gates precisam estar consistentes
-Zero ambiguidade de estado — `paper`, `approval` e `live` têm gates explícitos
----
-⚖️ Licença
-Business Source License 1.1 (BUSL-1.1)
-✅ Uso pessoal, estudo e desenvolvimento interno: permitido
-✅ Contribuições: bem-vindas
-❌ Uso comercial sem autorização escrita: não permitido
-📅 Conversão para open source: 1º de janeiro de 2028
-Titular: desenvolvedor do repositório `TiagoIA-UX/UNI-IA`.
-Licenciamento comercial: abra uma Issue no GitHub.
----
-⚠️ Aviso de Risco
-Boitatá IA é um sistema de suporte à decisão de investimentos. Não é recomendação de investimento. Operações em mercados financeiros envolvem risco de perda de capital. O uso é de responsabilidade exclusiva do operador. Leia o INSTALLATION.md antes de operar com capital real. BACEN Res. 519/2025 · CVM Res. 30 · LGPD 13.709/2018.
----
-Tese Institucional
-Estratégia sem governança é aposta
-Mercado não elimina o iniciante — elimina o indisciplinado
-Diversificação sem controle de risco não é proteção
-A prioridade do sistema é permanência, não euforia operacional
-P&D sem caixa é hobby; P&D com governança vira ativo
-Cada guardião representa uma espécie. Cada lucro financia sua sobrevivência.
----
-Execução Local
-```bash
-# Backend
-cd ai-sentinel
-pip install -r requirements.txt
-python run_local_api.py
-# → http://127.0.0.1:8000
 
-# Frontend (novo terminal)
-cd zairyx-frontend
-npm install
-npm run dev
-# → http://localhost:3000
-```
-Comandos Telegram admin: `/status` · `/pending` · `/approve <id>` · `/reject <id>` · `/cycle`
-Deploy Vercel
-Root Directory: `zairyx-frontend`
-Erro `Build Canceled` (unverified commit): crie branch → PR → merge pelo GitHub → commit sai como `Verified`
+Padrões: `feat:` · `fix:` · `docs:` · `refactor:` · `perf:` · `test:` · `chore:`
 
+---
+
+## 15. Princípios operacionais
+
+- Dados reais em execução (sem *placeholders* em caminho crítico).
+- Modo *paper* por defeito na configuração de exemplo; transição para *live* documentada.
+- Falhas comunicadas; estados explicitamente nomeados (`paper`, `approval`, `live`).
+
+---
+
+## 16. Licença
+
+**Business Source License 1.1 (BUSL-1.1)** — uso comercial mediante autorização. Conversão OSS prevista conforme arquivo de licença. Titular conforme registo do repositório.
+
+---
+
+## 17. Aviso de risco
+
+Este software **não é recomendação de investimento.** Mercados financeiros e criptoativos comportam **perda de capital**. Responsabilidade do operador. Consulte profissionais e normas aplicáveis (ex.: Bacen/CVM conforme caso, LGPD para dados pessoais). **Ausência de garantia tributária** quanto a tratamento de DAY TRADE ou GANHO DE CAPITAL até análise individualizada.
+
+---
+
+## 18. Tese institucional (atenção ao risco e à disciplina)
+
+- Estratégia sustentável exige governança, não apenas sinalização.
+- Diversificação sem controlo de risco não equivale a proteção de capital.
+- P&D institucional deve estar subordinado a critérios de caixa e compliance.
