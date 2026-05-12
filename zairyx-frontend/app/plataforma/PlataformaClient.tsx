@@ -143,7 +143,7 @@ const BOITATA_API_PROXY_BASE = '/boitata-api'
 /**
  * Base URL das chamadas à API ai-sentinel no browser.
  * 1) NEXT_PUBLIC_AI_API_URL / NEXT_PUBLIC_API_BASE se definidos (override explícito).
- * 2) Em localhost: http://127.0.0.1:8000 (dev clássico).
+ * 2) Em localhost: http://127.0.0.1:8010 (dev local via start-local).
  * 3) Noutro host (ex.: Vercel): mesmo site + /boitata-api (proxy server-side, sem CORS).
  */
 const API_BASE = ((): string => {
@@ -156,10 +156,10 @@ const API_BASE = ((): string => {
   if (fromEnv) return fromEnv
   if (typeof window !== 'undefined') {
     const h = window.location.hostname
-    if (h === 'localhost' || h === '127.0.0.1') return 'http://127.0.0.1:8000'
+    if (h === 'localhost' || h === '127.0.0.1') return 'http://127.0.0.1:8010'
     return strip(window.location.origin) + BOITATA_API_PROXY_BASE
   }
-  return 'http://127.0.0.1:8000'
+  return 'http://127.0.0.1:8010'
 })()
 
 /** Par MB (`BTC-BRL`) → segmento `POST /api/analyze/{asset}` como `BTCUSDT` (motor/yfinance). */
@@ -641,12 +641,17 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         })
       }
     } catch (err) {
-      const aborted = err instanceof Error && /abort/i.test(String(err.message ?? err.name ?? ''))
-      if (aborted && ctrl.signal.reason === 'superseded') {
-        console.info('[Boitata] analyze ABORTED (superseded por nova chamada)')
+      const msg = erroToMensagem(err)
+      const abortReason = String(ctrl.signal.reason ?? '').toLowerCase()
+      const aborted =
+        ctrl.signal.aborted ||
+        (err instanceof Error && /abort/i.test(String(err.message ?? err.name ?? ''))) ||
+        /^(aborterror|superseded|unmount)$/i.test(msg)
+      const silentAbort = aborted && (abortReason === 'superseded' || abortReason === 'unmount' || /^(superseded|unmount)$/i.test(msg))
+      if (silentAbort) {
+        console.info('[Boitata] analyze ABORTED', { reason: abortReason || msg })
         return
       }
-      const msg = erroToMensagem(err)
       const isNet = /Failed to fetch|network|TypeError|NetworkError|Load failed/i.test(msg)
       const friendly = aborted
         ? `Tempo esgotado (>60s). Pedido: POST /api/analyze/{asset} em ${API_BASE}.`

@@ -1,4 +1,4 @@
-# start-local.ps1 — Boitata IA
+# start-local.ps1 - Boitata IA
 # Uso: clique duplo em start-local.cmd ou: powershell -File start-local.ps1
 # Compativel com Windows PowerShell 5.1 e PowerShell 7+
 
@@ -23,13 +23,13 @@ if (Test-Path (Join-Path $VenvDot "Scripts\python.exe")) {
 }
 
 Write-Host ""
-Write-Host "Boitata IA — iniciando..." -ForegroundColor Cyan
+Write-Host "Boitata IA - iniciando..." -ForegroundColor Cyan
 Write-Host "  API  : $Api" -ForegroundColor DarkGray
 Write-Host "  Web  : $Web" -ForegroundColor DarkGray
 Write-Host "  Python: $Py" -ForegroundColor DarkGray
 Write-Host ""
 
-# Terminal 1 — API (porta 8010 evita conflito com outro processo na 8000)
+# Terminal 1 - API (porta 8010 evita conflito com outro processo na 8000)
 Start-Process cmd.exe -ArgumentList @(
     "/k",
     "title Boitata-API & cd /d `"$Api`" & `"$Py`" -m uvicorn api.main:app --host 127.0.0.1 --port $ApiPort --http h11"
@@ -37,7 +37,7 @@ Start-Process cmd.exe -ArgumentList @(
 
 Start-Sleep -Seconds 3
 
-# Terminal 2 — Next aponta para a mesma API nesta sessão (nao precisa editar .env)
+# Terminal 2 - Next aponta para a mesma API nesta sessao (nao precisa editar .env)
 $webCmd = "title Boitata-Web & cd /d `"$Web`" & set NEXT_PUBLIC_AI_API_URL=$ApiUrl& set NEXT_PUBLIC_API_BASE=$ApiUrl& npm run dev"
 Start-Process cmd.exe -ArgumentList @("/k", $webCmd)
 

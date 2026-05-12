@@ -201,7 +201,16 @@ def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) ->
         logger.error(f"Falha no despacho Telegram: {telegram_error}")
         telegram_result = {"success": False, "dispatched": False, "error": str(telegram_error)}
 
-    desk_result = private_desk.handle_alert(alert)
+    try:
+        desk_result = private_desk.handle_alert(alert)
+    except Exception as desk_error:
+        logger.warning("Mesa bloqueou alerta sem derrubar /api/analyze: %s", desk_error)
+        desk_result = {
+            "success": False,
+            "mode": desk_preview.get("mode"),
+            "action": "blocked",
+            "operational_status": str(desk_error),
+        }
     try:
         analysis_service.register_argus_after_desk_pipeline(alert, desk_result)
     except Exception as reg_err:
