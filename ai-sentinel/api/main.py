@@ -451,7 +451,52 @@ def analyze_asset(asset: str, body: Optional[AnalyzeRequestBody] = Body(default=
         return analyze_asset_pipeline(asset, chart_timeframe=chart_tf)
     except Exception as e:
         logger.error(f"Erro na análise do ativo {asset}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        msg = str(e)
+        agent_scores = {frontend_id: None for frontend_id in _FRONTEND_AGENT_FEATURE_MAP}
+        agent_scores.update({"SENTINEL": None, "AEGIS": None, "ARGUS": None})
+        return {
+            "success": False,
+            "data": {
+                "asset": asset,
+                "score": 0.0,
+                "classification": "RISCO",
+                "explanation": f"Analise degradada: {msg}",
+                "sources": [],
+                "strategy": {
+                    "mode": "degradado",
+                    "direction": "flat",
+                    "timeframe": chart_tf or "n/a",
+                    "confidence": 0.0,
+                    "operational_status": "analysis_degraded",
+                    "reasons": [msg],
+                },
+                "governance": None,
+                "chart_timeframe": chart_tf,
+                "agent_failures": [
+                    {
+                        "agent_name": "PIPELINE",
+                        "error_type": type(e).__name__,
+                        "error_message": msg[:512],
+                        "is_critical": True,
+                    }
+                ],
+                "integrity_score": 0.0,
+                "fast_path_decision": "block",
+            },
+            "agent_scores": agent_scores,
+            "agent_failures": [
+                {
+                    "agent_name": "PIPELINE",
+                    "error_type": type(e).__name__,
+                    "error_message": msg[:512],
+                    "is_critical": True,
+                }
+            ],
+            "integrity_score": 0.0,
+            "fast_path_decision": "block",
+            "telegram": {"success": False, "dispatched": False, "error": msg[:512]},
+            "desk": {"success": False, "action": "blocked", "operational_status": msg[:512]},
+        }
 
 
 @app.get("/api/meta/chart-timeframes", tags=["Metadados"])

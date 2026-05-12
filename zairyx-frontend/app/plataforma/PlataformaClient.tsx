@@ -31,6 +31,7 @@ interface AnalyzeAlertPayload {
   classification?: string
   explanation?: string
   strategy?: {
+    mode?: string
     direction?: string
     reasons?: string[]
     operational_status?: string
@@ -382,6 +383,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const [integrityScore, setIntegrityScore] = useState<number | null>(null)
   /** Falhas reais do pipeline (agente -> tipo de erro). */
   const [agentFailures, setAgentFailures] = useState<{ agent_name: string; error_type: string; error_message: string }[]>([])
+  /** Modo real retornado pelo motor (ex.: fast_scalp em M1-M15). */
+  const [analiseModo, setAnaliseModo] = useState<string | null>(null)
   /** AbortController da análise atual (cancela quando muda ativo/TF ou desmonta). */
   const analiseAbortRef = useRef<AbortController | null>(null)
   const [abaEsquerda, setAbaEsquerda] = useState<'operacao' | 'ativos'>('operacao')
@@ -431,6 +434,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     setAgentFailures([])
     setIntegrityScore(null)
     setAnaliseErro(null)
+    setAnaliseModo(null)
     // 'precoAtual' propositalmente fora das deps: senão recriaria a operação a cada tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ativoSelecionado, timeframe])
@@ -521,6 +525,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     setCarregandoAnalise(true)
     setAnaliseIniciadaEm(startedAt)
     setAnaliseErro(null)
+    setAnaliseModo(null)
 
     // Timeout fallback (60s) — aborta se o servidor não responder.
     const timeoutId = setTimeout(() => {
@@ -562,7 +567,14 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         Array.isArray(data.agent_failures) ? data.agent_failures : []
       const integ = typeof data.integrity_score === 'number' ? data.integrity_score : null
 
-      if (data.agent_scores) setAnaliseErro(null)
+      if (data.success === false) {
+        const degraded = data.data as { explanation?: unknown } | undefined
+        setAnaliseErro(
+          typeof degraded?.explanation === 'string'
+            ? degraded.explanation
+            : 'Analise degradada: o backend retornou success=false.'
+        )
+      } else if (data.agent_scores) setAnaliseErro(null)
       else {
         setAnaliseErro(
           'Backend desatualizado: nao retornou agent_scores. Reinicie o ai-sentinel (uvicorn) para pegar o commit mais recente.'
@@ -600,6 +612,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       const alert = data.data as AnalyzeAlertPayload | undefined
       if (alert && typeof alert === 'object') {
         const strat = alert.strategy
+        setAnaliseModo(typeof strat?.mode === 'string' ? strat.mode : null)
         const dirRaw = String(strat?.direction ?? '').toLowerCase()
         const direcao: 'COMPRA' | 'VENDA' = dirRaw === 'short' ? 'VENDA' : 'COMPRA'
         const cls = String(alert.classification ?? '')
@@ -679,6 +692,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
       setAgentFailures([])
       setIntegrityScore(null)
+      setAnaliseModo(null)
     } finally {
       clearTimeout(timeoutId)
       // Só desliga o "carregando" se essa chamada ainda for a atual (não foi superseded).
@@ -740,29 +754,12 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     } catch { /* ranking opcional */ }
 
     try {
-      const resultados = await Promise.allSettled(
-        candidatos.map(a =>
-          fetch(urlPostAnalyze(a.simbolo), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ timeframe: row.canonical, tf_label: tfLabel }),
-            signal: AbortSignal.timeout(8000),
-          }).then(async r => {
-            if (!r.ok) return null
-            const t = await r.text()
-            try {
-              return JSON.parse(t) as Record<string, unknown>
-            } catch {
-              return null
-            }
-          })
-        )
-      )
-      const ranking: Oportunidade[] = resultados
-        .map((r, i) => {
+      // O ranking nao deve chamar /api/analyze em lote: isso satura o LLM e derruba a leitura principal.
+      const ranking: Oportunidade[] = candidatos
+        .map((ativo) => {
           const base = {
-            simbolo: candidatos[i].simbolo,
-            nome: candidatos[i].nome,
+            simbolo: ativo.simbolo,
+            nome: ativo.nome,
             score: null as number | null,
             direcao: 'NEUTRO' as const,
             taxaAcerto: null as number | null,
@@ -770,25 +767,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
             amostraTier: null as string | null,
             classificacao: null as string | null,
           }
-          const hk = hitMap.get(compactAssetKey(candidatos[i].simbolo))
+          const hk = hitMap.get(compactAssetKey(ativo.simbolo))
           if (hk && hk.trades > 0) {
             base.taxaAcerto = hk.hit
             base.tradesHistorico = hk.trades
             base.amostraTier = hk.tier || null
           }
-          if (r.status !== 'fulfilled' || !r.value) {
-            return base
-          }
-          const d = (r.value.data ?? r.value) as { score?: unknown; classification?: unknown }
-          const rawScore = d.score
-          const s: number | null = typeof rawScore === 'number' && Number.isFinite(rawScore) ? rawScore : null
-          const cls = typeof d.classification === 'string' ? d.classification : null
-          return {
-            ...base,
-            score: s,
-            direcao: (s != null && s >= 70 ? 'COMPRA' : s != null && s >= 50 ? 'NEUTRO' : 'VENDA') as Oportunidade['direcao'],
-            classificacao: cls,
-          }
+          return base
         })
         .sort((a, b) => {
           const decisive = (t: number | null) => (t != null && t >= 3 ? 1 : 0)
@@ -918,6 +903,9 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
 
   // AEGIS real (sem cair em mock da operação simulada para não enganar o utilizador).
   const scoreFinal = agentes.find(a => a.id === 'AEGIS')?.score ?? null
+  const fastScalpAtivo = analiseModo === 'fast_scalp'
+  const fastScalpCoreIds = new Set(['ATLAS', 'TRENDS', 'SENTINEL', 'AEGIS'])
+  const agentesVisiveis = fastScalpAtivo ? agentes.filter(a => fastScalpCoreIds.has(a.id)) : agentes
 
   const corScore = (s: number | null) =>
     s === null ? '#7a7060' : s >= 75 ? '#22c55e' : s >= 50 ? '#f59e0b' : '#ef4444'
@@ -1430,6 +1418,11 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                 <div><strong>Analise indisponivel:</strong> {analiseErro}</div>
               ) : (
                 <>
+                  {fastScalpAtivo && (
+                    <div style={{ color: '#d1d5db', marginBottom: 4 }}>
+                      FAST_SCALP: apenas ATLAS, TRENDS, SENTINEL e AEGIS entram no gatilho. Noticias/macro ficam fora do caminho critico.
+                    </div>
+                  )}
                   {integrityScore != null && (
                     <div style={{ color: '#d1d5db', marginBottom: agentFailures.length > 0 ? 4 : 0 }}>
                       Integridade: {integrityScore.toFixed(0)}% dos agentes responderam
@@ -1447,7 +1440,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
           )}
 
           {guardioesAbertos && <div className={styles.agentesLista}>
-            {agentes.map(a => (
+            {agentesVisiveis.map(a => (
               <div key={a.id} className={styles.agenteCard}>
                 <div className={styles.agenteTop}>
                   <span className={styles.agenteEmoji}>{a.emoji}</span>

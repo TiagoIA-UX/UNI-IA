@@ -8,7 +8,7 @@ from core.execution_engine_fast import evaluate_fast_path
 from core.feature_store import FeatureStore
 from core.outcome_tracker import OutcomeTracker
 from core.regime_engine import RegimeEngine
-from core.schemas import AgentFailure, AgentSignal, OpportunityAlert, SentinelGovernanceDecision
+from core.schemas import AgentFailure, AgentSignal, OpportunityAlert, SentinelGovernanceDecision, StrategyDecision
 from core.sentinel_decision_store import SentinelDecisionStore
 from core.system_state import SystemStateManager
 
@@ -26,6 +26,8 @@ _AGENT_LABELS = {
     "fundamentalist": "FundamentalistAgent",
     "sentiment": "SentimentAgent",
 }
+
+_FAST_SCALP_TFS = frozenset({"1m", "2m", "5m", "15m"})
 
 
 class AnalysisService:
@@ -97,6 +99,221 @@ class AnalysisService:
             )
             return None, failure
 
+    @staticmethod
+    def _is_fast_scalp_timeframe(tf_norm: Optional[str]) -> bool:
+        return tf_norm in _FAST_SCALP_TFS
+
+    @staticmethod
+    def _signal_type_from_fast_decision(decision: str, confidence: float) -> str:
+        if decision == "long":
+            return "STRONG BUY" if confidence >= 80.0 else "BUY"
+        if decision == "short":
+            return "STRONG SELL" if confidence >= 80.0 else "SELL"
+        return "NEUTRAL"
+
+    @staticmethod
+    def _direction_from_fast_decision(decision: str) -> str:
+        if decision == "long":
+            return "long"
+        if decision == "short":
+            return "short"
+        return "flat"
+
+    @staticmethod
+    def _classification_from_fast_decision(decision: str, confidence: float) -> str:
+        if decision in {"block", "flat"}:
+            return "RISCO"
+        if confidence >= 75.0:
+            return "OPORTUNIDADE"
+        if confidence >= 60.0:
+            return "ATENCAO"
+        return "RISCO"
+
+    @staticmethod
+    def _trend_signal_from_atlas_features(asset: str, features: Dict[str, Any]) -> AgentSignal:
+        vol_ratio = features.get("user_chart_tf_volume_ratio")
+        if vol_ratio is None:
+            vol_ratio = features.get("volume_ratio")
+        try:
+            ratio = float(vol_ratio)
+        except (TypeError, ValueError):
+            ratio = 0.0
+
+        if ratio >= 1.5:
+            signal_type = "FOMO"
+            confidence = min(95.0, 60.0 + (ratio - 1.0) * 20.0)
+            summary = f"Volume relativo forte no timeframe do gatilho (ratio={ratio:.2f})."
+        elif ratio > 0 and ratio <= 0.5:
+            signal_type = "FEAR"
+            confidence = 65.0
+            summary = f"Volume fino para scalping (ratio={ratio:.2f}); reduzir agressividade."
+        else:
+            signal_type = "IGNORE"
+            confidence = 50.0
+            summary = f"Volume sem anomalia decisiva para scalping (ratio={ratio:.2f})."
+
+        return AgentSignal(
+            agent_name="TrendsAgent",
+            asset=asset,
+            signal_type=signal_type,
+            confidence=round(float(confidence), 2),
+            summary=summary,
+            raw_data=f"volume_ratio={ratio:.6f}",
+        )
+
+    def _analyze_fast_scalp(
+        self,
+        *,
+        asset: str,
+        sid: str,
+        tf_norm: Optional[str],
+        legenda: str,
+    ) -> OpportunityAlert:
+        from agents.atlas_agent import AtlasAgent
+        from agents.sentinel_agent import SentinelAgent
+
+        atlas = AtlasAgent(feature_store=self.feature_store)
+        atlas_features = atlas.compute_features(asset, chart_timeframe=tf_norm)
+        fast_path = evaluate_fast_path(atlas_features=atlas_features, chart_timeframe=tf_norm)
+        confidence = float(fast_path.get("confidence_pct") or 0.0)
+        decision = str(fast_path.get("decision") or "block")
+        direction = self._direction_from_fast_decision(decision)
+        signal_type = self._signal_type_from_fast_decision(decision, confidence)
+
+        atlas_summary = (
+            f"FAST_SCALP {tf_norm}: {decision} "
+            f"conf={confidence:.2f}; {', '.join(fast_path.get('reasons', [])[:4])}"
+        )
+        atlas_signal = AgentSignal(
+            agent_name="ATLAS",
+            asset=asset,
+            signal_type=signal_type,
+            confidence=confidence,
+            summary=atlas_summary,
+            raw_data=str(fast_path.get("features_used", {})),
+        )
+        trends = self._trend_signal_from_atlas_features(asset, atlas_features)
+
+        self.feature_store.persist(
+            signal_id=sid,
+            asset=asset,
+            agent_name="ATLAS",
+            features={**atlas_features, "emitted_confidence": confidence},
+            metadata={
+                "signal_type": atlas_signal.signal_type,
+                "summary": atlas_signal.summary,
+                "mode": "FAST_SCALP",
+                "strategy_legenda": legenda,
+            },
+        )
+        try:
+            trends_ratio = float(str(trends.raw_data or "").split("=", 1)[1])
+        except (IndexError, TypeError, ValueError):
+            trends_ratio = None
+
+        self.feature_store.persist(
+            signal_id=sid,
+            asset=asset,
+            agent_name="TrendsAgent",
+            features={
+                "volume_ratio": trends_ratio,
+                "emitted_confidence": float(trends.confidence),
+            },
+            metadata={
+                "signal_type": trends.signal_type,
+                "summary": trends.summary,
+                "mode": "FAST_SCALP",
+            },
+        )
+        self.feature_store.persist(
+            signal_id=sid,
+            asset=asset,
+            agent_name="EXECUTION_ENGINE_FAST",
+            features={
+                "decision": decision,
+                "confidence_pct": confidence,
+                "strategy_family": fast_path.get("strategy_family"),
+                **{f"feat_{k}": v for k, v in fast_path.get("features_used", {}).items()},
+            },
+            metadata={
+                "mode": "FAST_SCALP",
+                "reasons": fast_path.get("reasons", []),
+                "missing": fast_path.get("missing", []),
+                "weights_template": fast_path.get("weights_template", {}),
+            },
+        )
+
+        regime_context = self.regime_engine.classify(
+            asset=asset,
+            macro_signal=None,
+            atlas_signal=atlas_signal,
+            orion_signal=None,
+            news_signal=None,
+            atlas_features=atlas_features,
+        )
+        self.feature_store.persist(
+            signal_id=sid,
+            asset=asset,
+            agent_name="REGIME_ENGINE",
+            features={
+                **regime_context.regime_features,
+                "regime_id": regime_context.regime_id,
+                "regime_label": regime_context.regime_label,
+                "regime_version": regime_context.regime_version,
+                "regime_confidence": regime_context.regime_confidence,
+            },
+            metadata={"summary": regime_context.regime_label, "mode": "FAST_SCALP"},
+        )
+
+        classification = self._classification_from_fast_decision(decision, confidence)
+        reasons = list(fast_path.get("reasons", []))[:6]
+        reasons.append(trends.summary)
+        if decision == "block":
+            reasons.append("Entrada bloqueada pelo fast path antes de chamar agentes lentos.")
+
+        strategy = StrategyDecision(
+            mode="fast_scalp",
+            direction=direction,
+            timeframe=tf_norm or "n/a",
+            confidence=confidence,
+            operational_status="fast_scalp_ready" if direction != "flat" else "fast_scalp_blocked",
+            reasons=reasons,
+            execution_hint="gatilho rapido; noticias/macro nao entram no caminho critico",
+            regime_id=regime_context.regime_id,
+            regime_label=regime_context.regime_label,
+            regime_version=regime_context.regime_version,
+            regime_confidence=regime_context.regime_confidence,
+        )
+        alert = OpportunityAlert(
+            asset=asset,
+            score=confidence,
+            classification=classification,
+            explanation=f"FAST_SCALP {tf_norm}: decisao {decision} com score {confidence:.2f}.",
+            sources=["ATLAS", "TrendsAgent", "EXECUTION_ENGINE_FAST"],
+            strategy=strategy,
+            chart_timeframe=tf_norm,
+            agent_failures=[],
+            integrity_score=100.0,
+            fast_path_decision=decision,
+        )
+
+        sentinel = SentinelAgent(
+            system_state=self.system_state,
+            feature_store=self.feature_store,
+            outcome_tracker=self.outcome_tracker,
+            sentinel_store=self.sentinel_store,
+        )
+        sentinel_result = sentinel.evaluate(alert, signal_id=sid, regime_context=regime_context)
+        sentinel_result["signal_id"] = sid
+        alert = self._apply_sentinel_governance(alert, sentinel_result)
+        alert = validate_opportunity_alert(alert, expected_asset=asset)
+
+        print(
+            f"[{asset}] FAST_SCALP: decision={decision} score={alert.score} "
+            f"sentinel={alert.governance.sentinel_decision if alert.governance else 'none'}"
+        )
+        return alert
+
     def analyze(self, asset: str, signal_id: Optional[str] = None, chart_timeframe: Optional[str] = None) -> OpportunityAlert:
         from agents.atlas_agent import AtlasAgent
         from agents.macro_agent import MacroAgent
@@ -114,6 +331,9 @@ class AnalysisService:
         legenda = timeframe_strategy_legenda(tf_norm)
 
         print(f"[{asset}] INICIANDO VARREDURA ZAIRYX IA (signal_id={sid[:8]}...)")
+
+        if self._is_fast_scalp_timeframe(tf_norm):
+            return self._analyze_fast_scalp(asset=asset, sid=sid, tf_norm=tf_norm, legenda=legenda)
 
         agents_data: List[AgentSignal] = []
         agent_failures: List[AgentFailure] = []
