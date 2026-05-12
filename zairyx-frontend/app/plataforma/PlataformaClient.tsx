@@ -178,6 +178,22 @@ function urlPostAnalyze(simboloMb: string): string {
   return `${API_BASE}/api/analyze/${encodeURIComponent(asset)}`
 }
 
+/** Qualquer valor atirado ao catch → texto útil (evita "falha desconhecida"). */
+function erroToMensagem(err: unknown): string {
+  if (err instanceof Error) return (err.message || err.name || 'Error').trim() || 'Error'
+  if (typeof err === 'string') return err
+  if (err != null && typeof err === 'object') {
+    const m = (err as { message?: unknown }).message
+    if (typeof m === 'string' && m.trim()) return m.trim()
+    try {
+      return JSON.stringify(err)
+    } catch {
+      /* vazio */
+    }
+  }
+  return String(err)
+}
+
 function parseCorpoAnalyzeJson(text: string, urlPedido: string, httpStatus: number): AnalyzeApiBody {
   const trimmed = text.trim()
   if (!trimmed) {
@@ -630,8 +646,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         console.info('[Boitata] analyze ABORTED (superseded por nova chamada)')
         return
       }
-      const msg = err instanceof Error ? err.message : 'falha desconhecida'
-      const isNet = /Failed to fetch|network|TypeError/i.test(msg)
+      const msg = erroToMensagem(err)
+      const isNet = /Failed to fetch|network|TypeError|NetworkError|Load failed/i.test(msg)
       const friendly = aborted
         ? `Tempo esgotado (>60s). Pedido: POST /api/analyze/{asset} em ${API_BASE}.`
         : isNet
@@ -647,9 +663,12 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                   'ou use zairyx-frontend/.env.local com essa variável em dev.'
                 )
               }
-              return `Servidor de analise offline ou bloqueado (CORS/rede) em ${API_BASE}. Verifique se o ai-sentinel esta a correr e acessivel a partir deste browser.`
+              return (
+                `Sem ligacao a API em ${API_BASE}. Confirme que o uvicorn esta a correr na mesma porta ` +
+                `(ex.: start-local.cmd usa 8010). Detalhe: ${msg}`
+              )
             })()
-          : msg
+          : `${msg} | ${urlPost}`
       console.warn('[Boitata] analyze ERROR', { ms: Date.now() - startedAt, msg, friendly })
       setAnaliseErro(friendly)
       setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
@@ -1448,7 +1467,9 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                       ? 'agente falhou'
                       : carregandoAnalise
                         ? 'analisando...'
-                        : 'aguardando'}
+                        : analiseErro
+                          ? 'sem leitura'
+                          : 'aguardando'}
                 </div>
               </div>
             ))}
