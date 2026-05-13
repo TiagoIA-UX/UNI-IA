@@ -186,6 +186,16 @@ const API_BASE = ((): string => {
   return 'http://127.0.0.1:8010'
 })()
 
+/** Timeout POST /api/analyze (ms). Groq multi-agente pode exceder 60s sob TPM ou rede lenta. */
+const ANALYZE_TIMEOUT_MS = ((): number => {
+  const raw =
+    typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_ANALYZE_TIMEOUT_MS || '').trim() : ''
+  const n = parseInt(raw, 10)
+  if (Number.isFinite(n) && n >= 45000) return n
+  return 120000
+})()
+const ANALYZE_TIMEOUT_SEC = Math.max(45, Math.round(ANALYZE_TIMEOUT_MS / 1000))
+
 /** Par MB (`BTC-BRL`) -> segmento `POST /api/analyze/{asset}` como `BTCBRL` (broker MB). */
 function mbSimboloParaAssetAnalyzePath(simboloMb: string): string {
   const s = simboloMb.trim().toUpperCase()
@@ -759,10 +769,10 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     setAnaliseErro(null)
     setAnaliseModo(null)
 
-    // Timeout fallback (60s) — aborta se o servidor não responder.
+    // Timeout do pedido — alinhado ao tempo real do pipeline (varias chamadas Groq).
     const timeoutId = setTimeout(() => {
       try { ctrl.abort('timeout') } catch { /* ignora */ }
-    }, 60000)
+    }, ANALYZE_TIMEOUT_MS)
 
     console.info('[Boitata] analyze REQUEST', { assetPath, tf: row.canonical, url: urlPost })
 
@@ -945,7 +955,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       }
       const isNet = /Failed to fetch|network|TypeError|NetworkError|Load failed/i.test(msg)
       const friendly = aborted
-        ? `Tempo esgotado (>60s). Pedido: POST /api/analyze/{asset} em ${API_BASE}.`
+        ? `Tempo esgotado (>${ANALYZE_TIMEOUT_SEC}s). Pedido: POST /api/analyze/{asset} em ${API_BASE}.`
         : isNet
           ? (() => {
               const host =
@@ -1667,7 +1677,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                   {carregandoAnalise && (
                     <span className={styles.analisandoChip}>
                       {analiseIniciadaEm
-                        ? `analisando ${Math.max(0, Math.floor((now.getTime() - analiseIniciadaEm) / 1000))}s / 60s`
+                        ? `analisando ${Math.max(0, Math.floor((now.getTime() - analiseIniciadaEm) / 1000))}s / ${ANALYZE_TIMEOUT_SEC}s`
                         : 'analisando...'}
                     </span>
                   )}

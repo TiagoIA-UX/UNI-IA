@@ -11,7 +11,13 @@ class GroqClient:
         self.api_key = os.getenv("GROQ_API_KEY")
         if not self.api_key:
             print("Aviso: GROQ_API_KEY não encontrada no ambiente.")
-        self.client = Groq(api_key=self.api_key)
+        timeout_s = float(os.getenv("GROQ_TIMEOUT_SECONDS", "90"))
+        max_retries_raw = os.getenv("GROQ_MAX_RETRIES", os.getenv("GROQ_SDK_MAX_RETRIES", "2")).strip()
+        try:
+            max_retries = int(max_retries_raw)
+        except ValueError:
+            max_retries = 2
+        self.client = Groq(api_key=self.api_key, timeout=timeout_s, max_retries=max_retries)
         self.model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
         self.force_json_mode = os.getenv("GROQ_FORCE_JSON_MODE", "true").strip().lower() == "true"
         

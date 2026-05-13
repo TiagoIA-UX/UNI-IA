@@ -500,7 +500,12 @@ class AnalysisService:
                 expected_asset=asset,
             )
 
-        trends, f_trends = self._run_agent_safely(label="trends", runner=_run_trends)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_trends = pool.submit(self._run_agent_safely, label="trends", runner=_run_trends)
+            fut_fund = pool.submit(self._run_agent_safely, label="fundamentalist", runner=_run_fund)
+            trends, f_trends = fut_trends.result()
+            fund, f_fund = fut_fund.result()
+
         if trends is not None:
             agents_data.append(trends)
             print(f"[{asset}] Trends OK: {trends.signal_type}")
@@ -508,7 +513,6 @@ class AnalysisService:
             agent_failures.append(f_trends)
             print(f"[{asset}] AGENT FAIL {f_trends.agent_name}: {f_trends.error_type}: {f_trends.error_message}")
 
-        fund, f_fund = self._run_agent_safely(label="fundamentalist", runner=_run_fund)
         if fund is not None:
             agents_data.append(fund)
             print(f"[{asset}] Fundamentalist OK: {fund.signal_type}")
