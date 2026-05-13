@@ -92,6 +92,9 @@ class StopWatcher:
         with self._lock:
             return dict(self._positions)
 
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def _persist_positions(self) -> None:
         try:
             self.POSITIONS_FILE.parent.mkdir(parents=True, exist_ok=True)

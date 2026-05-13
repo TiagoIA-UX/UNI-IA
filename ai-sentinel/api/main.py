@@ -2,6 +2,8 @@ from pathlib import Path
 import os as _os
 import logging
 import threading
+import uuid
+from dataclasses import asdict
 from typing import Dict, Any, List, Optional
 
 from fastapi import Body, Depends, FastAPI, HTTPException, status
@@ -222,6 +224,34 @@ class DeskExecuteBody(BaseModel):
         u = (v or "").strip().upper()
         if u not in ("BUY", "SELL", "COMPRA", "VENDA"):
             raise ValueError("side deve ser BUY, SELL, COMPRA ou VENDA")
+        return u
+
+
+class StopWatcherPositionBody(BaseModel):
+    """Corpo de POST /api/admin/stop-watcher/positions — SL/SG simulados (thread StopWatcher)."""
+
+    position_id: Optional[str] = Field(None, max_length=160, description="Opcional; default UUID")
+    asset: str = Field(..., description="Par, ex.: BTCBRL ou BTC-BRL (normalizado como na mesa)")
+    direction: str = Field(..., description="long ou short")
+    entry_price: float = Field(..., gt=0)
+    quantity: float = Field(..., gt=0)
+    stop_loss: float = Field(..., gt=0)
+    stop_gain: float = Field(..., gt=0)
+
+    @field_validator("asset")
+    @classmethod
+    def strip_asset_sw(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("asset obrigatorio")
+        return s
+
+    @field_validator("direction")
+    @classmethod
+    def direction_norm(cls, v: str) -> str:
+        u = (v or "").strip().lower()
+        if u not in ("long", "short"):
+            raise ValueError("direction deve ser long ou short")
         return u
 
 
@@ -1063,6 +1093,72 @@ def http_outcomes_record(
     except Exception as e:
         logger.exception("http_outcomes_record")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/stop-watcher/positions", tags=["Admin"])
+def http_stop_watcher_register(
+    body: StopWatcherPositionBody,
+    _auth: None = Depends(require_admin_token),
+):
+    """
+    Regista posição com SL/SG para o StopWatcher (header `X-UNI-IA-ADMIN-TOKEN`).
+
+    Exige `STOP_WATCHER_ENABLED=true` no arranque para o loop de preço estar ativo;
+    as posições são persistidas mesmo com o loop parado.
+    """
+    norm = private_desk.normalize_trading_symbol(body.asset)
+    pid = (body.position_id or "").strip() or str(uuid.uuid4())
+
+    if body.direction == "long":
+        if not (body.stop_loss < body.entry_price < body.stop_gain):
+            logger.warning(
+                "stop_watcher register: long com SL/TP atipicos entrada=%s sl=%s sg=%s",
+                body.entry_price,
+                body.stop_loss,
+                body.stop_gain,
+            )
+    else:
+        if not (body.stop_gain < body.entry_price < body.stop_loss):
+            logger.warning(
+                "stop_watcher register: short com SL/TP atipicos entrada=%s sl=%s sg=%s",
+                body.entry_price,
+                body.stop_loss,
+                body.stop_gain,
+            )
+
+    pos = StopPosition(
+        position_id=pid,
+        asset=norm,
+        direction=body.direction,
+        entry_price=body.entry_price,
+        quantity=body.quantity,
+        stop_loss=body.stop_loss,
+        stop_gain=body.stop_gain,
+    )
+    stop_watcher.add_position(pos)
+    return {
+        "success": True,
+        "data": {
+            "position_id": pid,
+            "asset": norm,
+            "watcher_running": stop_watcher.is_running(),
+            "hint": "Defina STOP_WATCHER_ENABLED=true e reinicie a API para monitorizar preço MB continuamente.",
+        },
+    }
+
+
+@app.get("/api/admin/stop-watcher/positions", tags=["Admin"])
+def http_stop_watcher_list(_auth: None = Depends(require_admin_token)):
+    """Lista posições abertas no StopWatcher (memória + ficheiro persistido)."""
+    items = [asdict(p) for p in stop_watcher.get_positions().values()]
+    return {"success": True, "count": len(items), "watcher_running": stop_watcher.is_running(), "data": items}
+
+
+@app.delete("/api/admin/stop-watcher/positions/{position_id}", tags=["Admin"])
+def http_stop_watcher_remove(position_id: str, _auth: None = Depends(require_admin_token)):
+    """Remove posição do monitor (ex.: fechamento manual no broker)."""
+    stop_watcher.remove_position(position_id.strip())
+    return {"success": True, "removed": position_id.strip()}
 
 
 @app.post("/api/copytrade/execute/{asset}", tags=["Broker"])
