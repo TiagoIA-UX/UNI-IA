@@ -30,6 +30,7 @@ interface AnalyzeAlertPayload {
   score?: number
   classification?: string
   explanation?: string
+  fast_path_decision?: string
   strategy?: {
     mode?: string
     direction?: string
@@ -43,6 +44,7 @@ interface AnalyzeAlertPayload {
 interface AnalyzeApiBody {
   success?: boolean
   data?: unknown
+  fast_path_decision?: string
   agent_scores?: Record<string, number | null>
   agent_failures?: { agent_name: string; error_type: string; error_message: string }[]
   integrity_score?: number
@@ -118,6 +120,52 @@ function delayAteFechamentoConfirmado(canonical: string): number {
   const closeIn = ms - (now % ms)
   return Math.max(5_000, closeIn + 5_000)
 }
+
+/** Decisão consolidada alinhada ao motor (POST /api/analyze), não a heurística por agente. */
+type DecisaoMesa = 'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO'
+
+function resolverDecisaoConsolidada(payload: unknown): DecisaoMesa {
+  if (!payload || typeof payload !== 'object') return 'NEUTRO'
+  const p = payload as Record<string, unknown>
+  const fp = String(p.fast_path_decision ?? '').toLowerCase()
+  if (fp === 'block') return 'BLOQUEADO'
+
+  const gov = p.governance as { approved?: boolean } | null | undefined
+  if (gov != null && gov.approved === false) return 'BLOQUEADO'
+
+  const score = Number(p.score ?? 0)
+  if (score < 75) return 'NEUTRO'
+
+  const strat = p.strategy as { direction?: string } | null | undefined
+  const dir = String(strat?.direction ?? '').toLowerCase()
+  if (dir === 'long') return 'COMPRA'
+  if (dir === 'short') return 'VENDA'
+  return 'NEUTRO'
+}
+
+function calcularVotoGuardiao(score: number, decisao: DecisaoMesa | null): 'COMPRA' | 'VENDA' | 'NEUTRO' {
+  if (decisao === 'BLOQUEADO' || decisao === null) return 'NEUTRO'
+  if (decisao === 'NEUTRO') return 'NEUTRO'
+  if (decisao === 'COMPRA') {
+    return score >= 70 ? 'COMPRA' : score >= 45 ? 'NEUTRO' : 'VENDA'
+  }
+  if (decisao === 'VENDA') {
+    return score <= 35 ? 'VENDA' : score <= 60 ? 'NEUTRO' : 'COMPRA'
+  }
+  return 'NEUTRO'
+}
+
+function decisaoFromAnalyzeResponse(data: AnalyzeApiBody): DecisaoMesa | null {
+  if (data.success === false || data.data == null) return null
+  const base = data.data as Record<string, unknown>
+  return resolverDecisaoConsolidada({
+    ...base,
+    fast_path_decision: base.fast_path_decision ?? data.fast_path_decision,
+  })
+}
+
+/** Mínimo de trades decisivos para exibir % de acerto (vault / auditoria). */
+const HIT_RATE_MIN_TRADES = 5
 
 // ─── Agentes ──────────────────────────────────────────────────────────────────
 // IDs alinhados ao backend (api/main.py _FRONTEND_AGENT_FEATURE_MAP):
@@ -402,23 +450,10 @@ interface SignalBannerProps {
   decisao: 'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO' | null
   confianca: number | null
   taxaAcerto: number | null
-  taxaTrades: number | null
-  atualizado: Date | null
-  bloqueioMotivo: string | null
-  newsGateSuppressed: boolean
   carregando: boolean
 }
 
-function SignalBanner({
-  decisao,
-  confianca,
-  taxaAcerto,
-  taxaTrades,
-  atualizado,
-  bloqueioMotivo,
-  newsGateSuppressed,
-  carregando,
-}: SignalBannerProps) {
+function SignalBanner({ decisao, confianca, taxaAcerto, carregando }: SignalBannerProps) {
   const CONFIG = {
     COMPRA: { bg: 'rgba(34,197,94,0.12)', border: '#22c55e', texto: '#22c55e', label: 'COMPRA' },
     VENDA: { bg: 'rgba(239,68,68,0.12)', border: '#ef4444', texto: '#ef4444', label: 'VENDA' },
@@ -427,18 +462,9 @@ function SignalBanner({
   } as const
 
   const cfg = decisao ? CONFIG[decisao] : null
-
-  const [segsAtras, setSegsAtras] = useState(0)
-  useEffect(() => {
-    const id = setInterval(() => {
-      setSegsAtras(atualizado ? Math.floor((Date.now() - atualizado.getTime()) / 1000) : 0)
-    }, 1000)
-    return () => clearInterval(id)
-  }, [atualizado])
-
-  const tempoLabel = segsAtras < 60
-    ? `${segsAtras}s atras`
-    : `${Math.floor(segsAtras / 60)}min atras`
+  const labelPrincipal = cfg?.label ?? '—'
+  const temConf =
+    typeof confianca === 'number' && Number.isFinite(confianca) && !carregando
 
   return (
     <div
@@ -451,37 +477,33 @@ function SignalBanner({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {carregando ? (
-            <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#475569', letterSpacing: '-0.5px' }}>
-              Analisando...
-            </span>
-          ) : (
-            <span
-              style={{
-                fontSize: '1.6rem',
-                fontWeight: 900,
-                color: cfg?.texto ?? '#475569',
-                letterSpacing: '-0.5px',
-                lineHeight: 1,
-              }}
-            >
-              {cfg?.label ?? '—'}
-            </span>
-          )}
-        </div>
-        {confianca !== null && !carregando && (
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: cfg?.texto ?? '#475569', lineHeight: 1 }}>
-              {confianca.toFixed(0)}
-              <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#64748b', marginLeft: 2 }}>/100</span>
-            </div>
-            <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: 2 }}>forca do sinal</div>
+        <span
+          style={{
+            fontSize: '1.6rem',
+            fontWeight: 900,
+            color: cfg?.texto ?? '#475569',
+            letterSpacing: '-0.5px',
+            lineHeight: 1,
+          }}
+        >
+          {labelPrincipal}
+        </span>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: cfg?.texto ?? '#475569', lineHeight: 1 }}>
+            {temConf ? (
+              <>
+                {confianca!.toFixed(0)}
+                <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#64748b', marginLeft: 2 }}>/100</span>
+              </>
+            ) : (
+              <span style={{ color: '#64748b' }}>—</span>
+            )}
           </div>
-        )}
+          <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: 2 }}>força do sinal</div>
+        </div>
       </div>
 
-      {confianca !== null && (
+      {temConf && (
         <div style={{ height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 3, marginBottom: 10, overflow: 'hidden' }}>
           <div
             style={{
@@ -495,76 +517,32 @@ function SignalBanner({
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <div
+      <div>
+        <div
+          style={{
+            fontSize: '0.65rem',
+            color: '#475569',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            marginBottom: 2,
+          }}
+        >
+          Taxa de acerto · 90 dias
+        </div>
+        {taxaAcerto !== null ? (
+          <span
             style={{
-              fontSize: '0.65rem',
-              color: '#475569',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: 2,
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              color: taxaAcerto >= 60 ? '#22c55e' : taxaAcerto >= 45 ? '#f59e0b' : '#ef4444',
             }}
           >
-            Taxa de acerto · 90 dias
-          </div>
-          {taxaAcerto !== null ? (
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span
-                style={{
-                  fontSize: '1.1rem',
-                  fontWeight: 700,
-                  color: taxaAcerto >= 60 ? '#22c55e' : taxaAcerto >= 45 ? '#f59e0b' : '#ef4444',
-                }}
-              >
-                {taxaAcerto.toFixed(1)}%
-              </span>
-              {taxaTrades !== null && (
-                <span style={{ fontSize: '0.7rem', color: '#475569' }}>({taxaTrades} trades)</span>
-              )}
-            </div>
-          ) : (
-            <span style={{ fontSize: '0.75rem', color: '#334155' }}>Sem dados suficientes (&lt;5 trades)</span>
-          )}
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '0.65rem', color: '#334155' }}>
-            {carregando ? 'atualizando...' : tempoLabel}
-          </div>
-        </div>
+            {taxaAcerto.toFixed(1)}%
+          </span>
+        ) : (
+          <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#64748b' }}>—</span>
+        )}
       </div>
-
-      {decisao === 'BLOQUEADO' && bloqueioMotivo && (
-        <div
-          style={{
-            marginTop: 8,
-            padding: '6px 10px',
-            background: 'rgba(100,116,139,0.12)',
-            borderRadius: 6,
-            fontSize: '0.72rem',
-            color: '#94a3b8',
-            lineHeight: 1.5,
-          }}
-        >
-          {bloqueioMotivo}
-        </div>
-      )}
-
-      {newsGateSuppressed && (
-        <div
-          style={{
-            marginTop: 6,
-            padding: '5px 10px',
-            background: 'rgba(239,68,68,0.08)',
-            borderRadius: 6,
-            fontSize: '0.72rem',
-            color: '#f87171',
-          }}
-        >
-          Arara Azul bloqueou: noticia quente detectada — janela de risco ativa. Operacao suspensa ate a janela
-          encerrar.
-        </div>
-      )}
     </div>
   )
 }
@@ -606,12 +584,9 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
   const [carregandoOport, setCarregandoOport] = useState(false)
   const [sinalDecisao, setSinalDecisao] = useState<'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO' | null>(null)
+  const [decisaoConsolidada, setDecisaoConsolidada] = useState<DecisaoMesa | null>(null)
   const [sinalConfianca, setSinalConfianca] = useState<number | null>(null)
   const [taxaAcerto, setTaxaAcerto] = useState<number | null>(null)
-  const [taxaTrades, setTaxaTrades] = useState<number | null>(null)
-  const [sinalAtualizado, setSinalAtualizado] = useState<Date | null>(null)
-  const [sinalBloqueioMotivo, setSinalBloqueioMotivo] = useState<string | null>(null)
-  const [newsGateSuppressed, setNewsGateSuppressed] = useState(false)
   /** Estado da mesa na API (paper/live, broker, copy trade automático). */
   const [mesaExecContext, setMesaExecContext] = useState<{
     mode: string
@@ -655,12 +630,9 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     setAnaliseErro(null)
     setAnaliseModo(null)
     setSinalDecisao(null)
+    setDecisaoConsolidada(null)
     setSinalConfianca(null)
     setTaxaAcerto(null)
-    setTaxaTrades(null)
-    setSinalAtualizado(null)
-    setSinalBloqueioMotivo(null)
-    setNewsGateSuppressed(false)
     // 'precoAtual' propositalmente fora das deps: senão recriaria a operação a cada tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ativoSelecionado, timeframe])
@@ -837,7 +809,20 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         AEGIS: 'AEGIS',
       }
 
-      let decisaoParaVoto: 'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO' | null = null
+      let decisaoCache: 'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO' | null = null
+      const dcFromAnalyze = decisaoFromAnalyzeResponse(data)
+
+      if (dcFromAnalyze != null) {
+        setDecisaoConsolidada(dcFromAnalyze)
+        setSinalDecisao(dcFromAnalyze)
+        const alertEarly = data.data as AnalyzeAlertPayload | undefined
+        const sc =
+          alertEarly && typeof alertEarly.score === 'number' && Number.isFinite(alertEarly.score)
+            ? alertEarly.score
+            : null
+        setSinalConfianca(sc)
+      }
+
       try {
         const sr = await fetch(
           `${API_BASE}/api/signal/summary/${encodeURIComponent(assetPath)}?timeframe=${encodeURIComponent(row.canonical)}`,
@@ -849,32 +834,31 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
             confidence?: number | null
             hit_rate_pct?: number | null
             hit_rate_trades?: number | null
-            last_updated?: string | null
-            blocking_reason?: string | null
-            news_gate_suppressed?: boolean
           }
           const d = sd.decision
           if (d === 'COMPRA' || d === 'VENDA' || d === 'NEUTRO' || d === 'BLOQUEADO') {
-            decisaoParaVoto = d
-          } else {
-            decisaoParaVoto = null
+            decisaoCache = d
           }
-          setSinalDecisao(decisaoParaVoto)
-          setSinalConfianca(typeof sd.confidence === 'number' ? sd.confidence : null)
-          setTaxaAcerto(typeof sd.hit_rate_pct === 'number' ? sd.hit_rate_pct : null)
-          setTaxaTrades(typeof sd.hit_rate_trades === 'number' ? sd.hit_rate_trades : null)
-          setSinalBloqueioMotivo(typeof sd.blocking_reason === 'string' ? sd.blocking_reason : null)
-          setNewsGateSuppressed(Boolean(sd.news_gate_suppressed))
-          if (sd.last_updated) {
-            const parsed = new Date(sd.last_updated)
-            setSinalAtualizado(Number.isFinite(parsed.getTime()) ? parsed : new Date())
+          if (dcFromAnalyze == null) {
+            if (decisaoCache != null) {
+              setDecisaoConsolidada(decisaoCache)
+              setSinalDecisao(decisaoCache)
+            }
+            setSinalConfianca(typeof sd.confidence === 'number' ? sd.confidence : null)
+          }
+          const trades = typeof sd.hit_rate_trades === 'number' ? sd.hit_rate_trades : 0
+          if (trades >= HIT_RATE_MIN_TRADES && typeof sd.hit_rate_pct === 'number') {
+            setTaxaAcerto(sd.hit_rate_pct)
           } else {
-            setSinalAtualizado(new Date())
+            setTaxaAcerto(null)
           }
         }
       } catch {
         /* nao bloqueia a analise de agentes */
       }
+
+      const dcParaVotos: DecisaoMesa | null =
+        dcFromAnalyze ?? (decisaoCache as DecisaoMesa | null)
 
       setAgentes(prev => prev.map(a => {
         const raw = scores[a.id]
@@ -882,13 +866,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         const score: number | null = typeof raw === 'number' && Number.isFinite(raw) ? raw : null
         let voto: Agente['voto'] = null
         if (score != null) {
-          if (decisaoParaVoto === 'COMPRA') {
-            voto = score >= 70 ? 'COMPRA' : score >= 45 ? 'NEUTRO' : 'VENDA'
-          } else if (decisaoParaVoto === 'VENDA') {
-            voto = score <= 35 ? 'VENDA' : score <= 55 ? 'NEUTRO' : 'COMPRA'
-          } else {
-            voto = score >= 75 ? 'COMPRA' : score >= 50 ? 'NEUTRO' : 'VENDA'
-          }
+          voto = calcularVotoGuardiao(score, dcParaVotos)
         } else if (failed) {
           voto = 'REJEITADO'
         }
@@ -982,12 +960,9 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       setIntegrityScore(null)
       setAnaliseModo(null)
       setSinalDecisao(null)
+      setDecisaoConsolidada(null)
       setSinalConfianca(null)
       setTaxaAcerto(null)
-      setTaxaTrades(null)
-      setSinalAtualizado(null)
-      setSinalBloqueioMotivo(null)
-      setNewsGateSuppressed(false)
     } finally {
       clearTimeout(timeoutId)
       // Só desliga o "carregando" se essa chamada ainda for a atual (não foi superseded).
@@ -1660,13 +1635,9 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         {/* ── COLUNA DIREITA: AGENTES (drawer colapsavel) ────────────────── */}
         <aside className={`${styles.colunaDireita} ${guardioesAbertos ? '' : styles.colunaDireitaFechada}`}>
           <SignalBanner
-            decisao={sinalDecisao}
+            decisao={decisaoConsolidada ?? sinalDecisao}
             confianca={sinalConfianca}
             taxaAcerto={taxaAcerto}
-            taxaTrades={taxaTrades}
-            atualizado={sinalAtualizado}
-            bloqueioMotivo={sinalBloqueioMotivo}
-            newsGateSuppressed={newsGateSuppressed}
             carregando={carregandoAnalise}
           />
           <div className={styles.agentesHeader}>

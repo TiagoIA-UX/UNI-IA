@@ -24,6 +24,7 @@ from core.chart_timeframes import normalize_chart_timeframe, public_timeframes_c
 from core.daily_ops_report import DailyOpsReportService
 from core.kill_switch import KillSwitchService
 from core.system_state import SystemStateManager, UniIAMode
+from core.stop_watcher import StopPosition, StopWatcher
 
 # Configuração de Logging para Monitoramento Proativo
 logging.basicConfig(
@@ -84,6 +85,93 @@ try:
 except Exception as init_err:
     logger.error(f"Falha crítica na inicialização dos serviços: {init_err}")
     raise init_err
+
+
+def _telegram_admin_alert(message: str) -> None:
+    """Envia HTML ao admin; falha silenciosa exceto log."""
+    import requests
+
+    admin_raw = (_os.getenv("TELEGRAM_ADMIN_CHAT_IDS", "") or "").strip()
+    token = (_os.getenv("TELEGRAM_BOT_TOKEN") or _os.getenv("TELEGRAM_FREE_BOT_TOKEN") or "").strip()
+    if not admin_raw or not token:
+        logger.warning("[ALERTA ADMIN - sem Telegram] %s", message[:500])
+        return
+    for chat_id in [c.strip() for c in admin_raw.split(",") if c.strip()]:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
+                timeout=8,
+            )
+        except Exception as exc:
+            logger.warning("[ALERTA ADMIN - falha Telegram] chat=%s err=%s", chat_id, exc)
+
+
+def _mb_last_for_stop_watcher(asset: str) -> float:
+    return float(mb_get_ticker(asset)["last"])
+
+
+def _stop_watcher_execute_close(pos: StopPosition, reason: str) -> Dict[str, Any]:
+    side = "SELL" if pos.direction == "long" else "BUY"
+    return copy_trade_service.execute_manual_order(
+        symbol=pos.asset,
+        side=side,
+        quantity=str(pos.quantity),
+        meta={"stop_watcher": True, "reason": reason, "position_id": pos.position_id},
+    )
+
+
+stop_watcher = StopWatcher(
+    _mb_last_for_stop_watcher,
+    _stop_watcher_execute_close,
+    _telegram_admin_alert,
+)
+
+
+def _alert_admin_startup_failure(componente: str, erro: str) -> None:
+    _telegram_admin_alert(
+        f"🔴 <b>Boitatá IA — FALHA NO STARTUP</b>\n"
+        f"Componente: <b>{componente}</b>\n"
+        f"Erro: <code>{erro[:300]}</code>\n\n"
+        f"⚠️ Verifique os logs e as variáveis de ambiente."
+    )
+
+
+def _send_startup_heartbeat() -> None:
+    """Uma mensagem ao boot confirmando que a API subiu (não bloqueia)."""
+    from datetime import datetime, timezone
+
+    import requests
+
+    admin_raw = (_os.getenv("TELEGRAM_ADMIN_CHAT_IDS", "") or "").strip()
+    token = (_os.getenv("TELEGRAM_BOT_TOKEN") or _os.getenv("TELEGRAM_FREE_BOT_TOKEN") or "").strip()
+    if not admin_raw or not token:
+        logger.info("[STARTUP] Heartbeat ignorado (TELEGRAM_ADMIN_CHAT_IDS ou token ausente).")
+        return
+
+    agora = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M:%S UTC")
+    desk_mode = (_os.getenv("DESK_MODE") or _os.getenv("UNI_IA_MODE") or "paper").strip().upper()
+    scanner_flag = (_os.getenv("SIGNAL_SCANNER_ENABLED", "false").strip().upper())
+    assets = (_os.getenv("SIGNAL_SCAN_ASSETS", "") or "não configurado").strip()
+
+    msg = (
+        f"🟢 <b>Boitatá IA — Sistema ONLINE</b>\n"
+        f"Data: {agora}\n"
+        f"Mesa: <b>{desk_mode}</b>\n"
+        f"SIGNAL_SCANNER_ENABLED: <b>{scanner_flag}</b>\n"
+        f"Ativos: <b>{assets}</b>\n\n"
+        f"Inicialização automática da API. Aguardando sinais qualificados."
+    )
+    for chat_id in [c.strip() for c in admin_raw.split(",") if c.strip()]:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
+                timeout=8,
+            )
+            logger.info("[STARTUP] Heartbeat enviado para admin %s", chat_id)
+        except Exception as exc:
+            logger.warning("[STARTUP] Heartbeat falhou (%s): %s", chat_id, exc)
 
 
 class AnalyzeRequestBody(BaseModel):
@@ -434,15 +522,54 @@ def _build_signal_summary_payload(asset: str, timeframe: Optional[str]) -> Dict[
 # --- Ciclo de Vida ---
 @app.on_event("startup")
 async def startup_signal_scanner():
-    logger.info("Iniciando rotinas de monitoramento...")
-    signal_scanner.start()
-    telegram_control.start()
+    logger.info("Iniciando rotinas de monitoramento (startup)...")
+
+    scanner_env_on = _os.getenv("SIGNAL_SCANNER_ENABLED", "false").lower() == "true"
+    try:
+        res = signal_scanner.start(force=False)
+        logger.info("[STARTUP] Scanner: %s", res)
+        if scanner_env_on and not res.get("started"):
+            reason = res.get("reason", "?")
+            if reason not in ("scanner_ja_ativo",):
+                _alert_admin_startup_failure("signal_scanner", str(reason))
+    except Exception as exc:
+        logger.exception("[STARTUP] Scanner falhou")
+        if scanner_env_on:
+            _alert_admin_startup_failure("signal_scanner", str(exc))
+
+    try:
+        tc_res = telegram_control.start()
+        logger.info("[STARTUP] Telegram control: %s", tc_res)
+        if _os.getenv("TELEGRAM_CONTROL_ENABLED", "false").lower() == "true" and not tc_res.get("started"):
+            _alert_admin_startup_failure("telegram_control", str(tc_res.get("reason", tc_res)))
+    except Exception as exc:
+        logger.exception("[STARTUP] Telegram control falhou")
+        if _os.getenv("TELEGRAM_CONTROL_ENABLED", "false").lower() == "true":
+            _alert_admin_startup_failure("telegram_control", str(exc))
+
+    if _os.getenv("STOP_WATCHER_ENABLED", "false").lower() == "true":
+        try:
+            stop_watcher.start()
+            logger.info("[STARTUP] StopWatcher: ATIVO")
+        except Exception as exc:
+            logger.exception("[STARTUP] StopWatcher falhou")
+            _alert_admin_startup_failure("stop_watcher", str(exc))
+    else:
+        logger.info("[STARTUP] StopWatcher desligado (STOP_WATCHER_ENABLED!=true)")
+
+    _send_startup_heartbeat()
+    logger.info("[STARTUP] Boitatá IA — API operacional.")
+
 
 @app.on_event("shutdown")
 async def shutdown_signal_scanner():
     logger.info("Encerrando serviços de forma segura...")
     signal_scanner.stop()
     telegram_control.stop()
+    try:
+        stop_watcher.stop()
+    except Exception as exc:
+        logger.warning("stop_watcher.stop: %s", exc)
 
 # --- ESG removido — reservado para fase futura ---
 

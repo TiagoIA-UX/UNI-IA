@@ -312,10 +312,13 @@ class SignalScanner:
     def _scanner_runtime_mode(self) -> str:
         if self.system_state:
             return str(self.system_state.mode.value).lower()
+        desk = (os.getenv("DESK_MODE") or "").strip()
+        if desk:
+            return desk.lower()
         uni = (os.getenv("UNI_IA_MODE") or "").strip()
         if uni:
             return uni.lower()
-        return (os.getenv("DESK_MODE", "paper") or "paper").strip().lower()
+        return "paper"
 
     def _strict_operational_mode(self) -> bool:
         return self._scanner_runtime_mode() in {"approval", "live"}
