@@ -1,4 +1,4 @@
-"""ATLAS — Agente Estrutural Tecnico.
+﻿"""ATLAS — Agente Estrutural Tecnico.
 
 ATLAS nao le noticia. ATLAS nao interpreta macro.
 ATLAS le estrutura e fluxo.
