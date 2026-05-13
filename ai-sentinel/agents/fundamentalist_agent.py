@@ -3,7 +3,7 @@ from typing import Optional
 import yfinance as yf
 from agents.market_utils import resolve_market_ticker
 from core.feature_store import FeatureStore
-from core.schemas import AgentSignal
+from core.schemas import AgentSignal, LlmProvenance
 from llm.groq_client import GroqClient
 from llm.json_utils import extract_json_object
 
@@ -76,9 +76,9 @@ class FundamentalistAgent:
         if strategy_legenda:
             prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         
-        response = self.llm.generate_response(self.system_prompt, prompt)
-        
-        data = extract_json_object(response)
+        comp = self.llm.complete(self.system_prompt, prompt)
+
+        data = extract_json_object(comp.text)
 
         if signal_id:
             self.feature_store.persist(
@@ -105,5 +105,11 @@ class FundamentalistAgent:
             signal_type=data["signal_type"],
             confidence=float(data["confidence"]),
             summary=data["summary"],
-            raw_data=fund_data
+            raw_data=fund_data,
+            llm_provenance=LlmProvenance(
+                provider=comp.provider,
+                model=comp.model,
+                status="llm_success",
+                detail="fundamentals",
+            ),
         )

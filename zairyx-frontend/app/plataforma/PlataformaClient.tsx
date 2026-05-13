@@ -38,6 +38,16 @@ interface AnalyzeAlertPayload {
     operational_status?: string
   } | null
   governance?: { approved?: boolean } | null
+  /** Mapa agente -> origem/status da inferencia LLM (backend 1.4+). */
+  agent_llm_provenance?: Record<string, AgentLlmProvenanceEntry>
+}
+
+/** Uma entrada de `agent_llm_provenance` (alinhado a `core.schemas.LlmProvenance`). */
+interface AgentLlmProvenanceEntry {
+  provider?: string
+  model?: string | null
+  status?: string
+  detail?: string | null
 }
 
 /** Corpo JSON de POST /api/analyze/{asset} (campos usados na plataforma). */
@@ -573,6 +583,8 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const [integrityScore, setIntegrityScore] = useState<number | null>(null)
   /** Falhas reais do pipeline (agente -> tipo de erro). */
   const [agentFailures, setAgentFailures] = useState<{ agent_name: string; error_type: string; error_message: string }[]>([])
+  /** Rastreabilidade Groq por agente (quando o backend envia). */
+  const [agentLlmProvenance, setAgentLlmProvenance] = useState<Record<string, AgentLlmProvenanceEntry> | null>(null)
   /** Modo real retornado pelo motor (ex.: fast_scalp em M1-M15). */
   const [analiseModo, setAnaliseModo] = useState<string | null>(null)
   /** AbortController da análise atual (cancela quando muda ativo/TF ou desmonta). */
@@ -626,6 +638,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     // Limpa os agentes ao mudar TF para não exibir scores antigos.
     setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
     setAgentFailures([])
+    setAgentLlmProvenance(null)
     setIntegrityScore(null)
     setAnaliseErro(null)
     setAnaliseModo(null)
@@ -738,8 +751,11 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
 
     setCarregandoAnalise(true)
     setAnaliseIniciadaEm(startedAt)
+    setOperacaoAtiva(prev => prev ? { ...prev, status: 'aguardando', motivo: 'Analisando...' } : prev)
+    setDecisaoConsolidada(null)
     setAnaliseErro(null)
     setAnaliseModo(null)
+    setAgentLlmProvenance(null)
 
     // Timeout do pedido — alinhado ao tempo real do pipeline (varias chamadas Groq).
     const timeoutId = setTimeout(() => {
@@ -875,6 +891,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       setAgentFailures(failures)
       setIntegrityScore(integ)
 
+      const alertProvSource = data.data as AnalyzeAlertPayload | undefined
+      if (alertProvSource?.agent_llm_provenance && typeof alertProvSource.agent_llm_provenance === 'object') {
+        setAgentLlmProvenance(alertProvSource.agent_llm_provenance)
+      } else {
+        setAgentLlmProvenance(null)
+      }
+
       const alert = data.data as AnalyzeAlertPayload | undefined
       if (alert && typeof alert === 'object') {
         const strat = alert.strategy
@@ -888,7 +911,11 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         const gov = alert.governance
         const blockedByGov = gov != null && gov.approved === false
         let status: Operacao['status'] = 'monitorando'
-        if (blockedByGov || cls.includes('RISCO')) status = 'rejeitada'
+        if (blockedByGov || decisaoConsolidada === 'BLOQUEADO' || cls.includes('RISCO')) {
+        status = 'rejeitada'
+      } else if (decisaoConsolidada === 'COMPRA' || decisaoConsolidada === 'VENDA') {
+        status = 'monitorando'
+      }
 
         const scoreNum =
           typeof alert.score === 'number' && Number.isFinite(alert.score) ? alert.score : 0
@@ -957,6 +984,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       setAnaliseErro(friendly)
       setAgentes(AGENTES_BASE.map(a => ({ ...a, score: null, voto: null })))
       setAgentFailures([])
+      setAgentLlmProvenance(null)
       setIntegrityScore(null)
       setAnaliseModo(null)
       setSinalDecisao(null)
@@ -1687,7 +1715,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
             )}
           </div>
 
-          {guardioesAbertos && (analiseErro || agentFailures.length > 0 || integrityScore != null) && (
+          {guardioesAbertos && (analiseErro || agentFailures.length > 0 || integrityScore != null || (agentLlmProvenance && Object.keys(agentLlmProvenance).length > 0)) && (
             <div
               style={{
                 margin: '8px 8px 0',
@@ -1712,6 +1740,16 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
                   {integrityScore != null && (
                     <div style={{ color: '#d1d5db', marginBottom: agentFailures.length > 0 ? 4 : 0 }}>
                       Integridade: {integrityScore.toFixed(0)}% dos agentes responderam
+                    </div>
+                  )}
+                  {agentLlmProvenance && Object.keys(agentLlmProvenance).length > 0 && (
+                    <div style={{ color: '#94a3b8', marginBottom: agentFailures.length > 0 ? 4 : 0 }}>
+                      Transparencia LLM:{' '}
+                      {Object.entries(agentLlmProvenance).map(([name, p]) => (
+                        <span key={name} style={{ marginRight: 10 }}>
+                          {name}: {p.status ?? '?'} ({p.provider ?? '?'})
+                        </span>
+                      ))}
                     </div>
                   )}
                   {agentFailures.length > 0 && (

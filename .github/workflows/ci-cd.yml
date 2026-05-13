@@ -24,6 +24,11 @@ jobs:
           cd ai-sentinel
           pip install -r requirements.txt
 
+      - name: Run Python unit tests (ai-sentinel)
+        run: |
+          cd ai-sentinel
+          python -m unittest discover -s tests -p "test_*.py" -q
+
       # ── Frontend (Next.js / Dashboard) ────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v3

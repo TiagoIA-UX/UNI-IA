@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -136,7 +137,11 @@ class AegisTests(unittest.TestCase):
 
         with patch("agents.aegis_agent.GroqClient") as MockGroq:
             instance = MockGroq.return_value
-            instance.generate_response.return_value = mock_response
+            instance.complete.return_value = SimpleNamespace(
+                text=mock_response,
+                model="test-model",
+                provider="groq",
+            )
 
             aegis = AegisAgent()
             signals = [
@@ -144,11 +149,13 @@ class AegisTests(unittest.TestCase):
                 AgentSignal(agent_name="ORION", asset="BTCUSDT", signal_type="BULLISH", confidence=80.0, summary="Narrativa favoravel."),
             ]
 
-            alert = aegis.fuse("BTCUSDT", signals)
+            alert, prov = aegis.fuse("BTCUSDT", signals)
             self.assertEqual(alert.classification, "OPORTUNIDADE")
             self.assertEqual(alert.strategy.direction, "long")
             self.assertIn("ATLAS", alert.sources)
             self.assertIn("ORION", alert.sources)
+            self.assertEqual(prov.status, "llm_success")
+            self.assertEqual(prov.provider, "groq")
 
     def test_fusion_conflicting_goes_conservative(self):
         os.environ.pop("NEXT_PUBLIC_SUPABASE_URL", None)
@@ -167,7 +174,11 @@ class AegisTests(unittest.TestCase):
 
         with patch("agents.aegis_agent.GroqClient") as MockGroq:
             instance = MockGroq.return_value
-            instance.generate_response.return_value = mock_response
+            instance.complete.return_value = SimpleNamespace(
+                text=mock_response,
+                model="test-model",
+                provider="groq",
+            )
 
             aegis = AegisAgent()
             signals = [
@@ -175,7 +186,7 @@ class AegisTests(unittest.TestCase):
                 AgentSignal(agent_name="ORION", asset="ETHUSDT", signal_type="BULLISH", confidence=75.0, summary="Narrativa positiva."),
             ]
 
-            alert = aegis.fuse("ETHUSDT", signals)
+            alert, _prov = aegis.fuse("ETHUSDT", signals)
             self.assertEqual(alert.classification, "ATENCAO")
             self.assertEqual(alert.strategy.direction, "flat")
 

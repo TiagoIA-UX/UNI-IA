@@ -15,13 +15,13 @@ Persiste features no FeatureStore.
 """
 
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
 
 from core.feature_store import FeatureStore
-from core.schemas import AgentSignal
+from core.schemas import AgentSignal, LlmProvenance
 from llm.groq_client import GroqClient
 from llm.json_utils import extract_json_object
 
@@ -72,16 +72,15 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     def _fetch_news(self, asset: str) -> List[Dict[str, str]]:
         query = urllib.parse.quote(f"{asset} mercado financeiro economia")
         url = f"https://news.google.com/rss/search?q={query}&hl=pt-BR&gl=BR&ceid=BR:pt-419"
-
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-
-        soup = BeautifulSoup(resp.content, "xml")
-        items = soup.find_all("item")[:10]
-
+        try:
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.content, "xml")
+            items = soup.find_all("item")[:10]
+        except Exception:
+            return []
         if not items:
-            raise ValueError(f"Nenhuma noticia encontrada para {asset}.")
-
+            return []
         return [
             {
                 "title": item.title.text if item.title else "",
@@ -94,35 +93,73 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     # Per-news classification
     # ------------------------------------------------------------------
 
-    def _classify_single_news(self, asset: str, news_item: Dict[str, str]) -> Dict[str, Any]:
+    def _classify_single_news(
+        self, asset: str, news_item: Dict[str, str]
+    ) -> Tuple[Dict[str, Any], Optional[str]]:
+        """Classifica uma manchete. Segundo valor: None OK, 'groq' falha API, 'parse' JSON invalido."""
         prompt = f"Ativo: {asset}\nNoticia: {news_item['title']}\nData: {news_item['pub_date']}"
-        response = self.llm.generate_response(self.classification_prompt, prompt)
+        fallback = {
+            "polarity": "NEUTRAL",
+            "impact_score": 0,
+            "surprise_level": "NONE",
+            "impact_horizon": "medium_term",
+            "category": "other",
+            "summary": "Classificacao indisponivel (Groq ou rede).",
+        }
         try:
-            return extract_json_object(response)
+            comp = self.llm.complete(self.classification_prompt, prompt)
+        except RuntimeError:
+            fb = dict(fallback)
+            fb["summary"] = "Classificacao indisponivel (Groq ou rede)."
+            return fb, "groq"
+        try:
+            return extract_json_object(comp.text), None
         except Exception:
-            return {
-                "polarity": "NEUTRAL",
-                "impact_score": 0,
-                "surprise_level": "NONE",
-                "impact_horizon": "medium_term",
-                "category": "other",
-                "summary": "Falha na classificacao.",
-            }
-
+            fb = dict(fallback)
+            fb["summary"] = "Falha na classificacao."
+            return fb, "parse"
     # ------------------------------------------------------------------
     # Feature computation
     # ------------------------------------------------------------------
 
-    def compute_features(self, asset: str) -> Dict[str, Any]:
+    def compute_features(self, asset: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         """Busca noticias, classifica cada uma, consolida features numericas."""
         raw_news = self._fetch_news(asset)
+        if not raw_news:
+            empty_features: Dict[str, Any] = {
+                "asset": asset,
+                "news_total": 0,
+                "news_positive": 0,
+                "news_negative": 0,
+                "news_neutral": 0,
+                "sentiment_score": 0.0,
+                "avg_impact_score": 0.0,
+                "max_impact_score": 0.0,
+                "surprise_ratio_pct": 0.0,
+                "high_surprise_count": 0,
+                "horizon_immediate": 0,
+                "horizon_short_term": 0,
+                "horizon_medium_term": 0,
+                "dominant_category": "other",
+                "category_distribution": {},
+                "news_feed_status": "empty_or_unavailable",
+                "groq_classify_failures": 0,
+                "classify_parse_failures": 0,
+            }
+            return empty_features, []
+
         classifications: List[Dict[str, Any]] = []
+        groq_classify_failures = 0
+        classify_parse_failures = 0
 
         for item in raw_news:
-            classification = self._classify_single_news(asset, item)
+            classification, fail_tag = self._classify_single_news(asset, item)
+            if fail_tag == "groq":
+                groq_classify_failures += 1
+            elif fail_tag == "parse":
+                classify_parse_failures += 1
             classification["title"] = item["title"]
             classifications.append(classification)
-
         # Aggregate features
         total = len(classifications)
         positive = sum(1 for c in classifications if c.get("polarity") == "POSITIVE")
@@ -162,8 +199,10 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
 
         features = {
             "asset": asset,
-            "news_total": total,
-            "news_positive": positive,
+            "news_feed_status": "ok",
+            "groq_classify_failures": groq_classify_failures,
+            "classify_parse_failures": classify_parse_failures,
+            "news_total": total,            "news_positive": positive,
             "news_negative": negative,
             "news_neutral": neutral,
             "sentiment_score": sentiment_score,
@@ -180,6 +219,31 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
 
         return features, classifications
 
+    @staticmethod
+    def _synthesis_fallback_from_features(features: Dict[str, Any]) -> Dict[str, Any]:
+        """Quando a sintese LLM falha mas ja ha features numericas."""
+        sentiment = float(features.get("sentiment_score") or 0)
+        if sentiment > 12:
+            signal_type = "BULLISH"
+            regime = "RISK-ON"
+        elif sentiment < -12:
+            signal_type = "BEARISH"
+            regime = "RISK-OFF"
+        else:
+            signal_type = "NEUTRAL"
+            regime = "TRANSITIONAL"
+        conf = min(88.0, 45.0 + min(abs(sentiment), 40.0))
+        return {
+            "signal_type": signal_type,
+            "confidence": conf,
+            "regime": regime,
+            "regime_shift_probability": float(features.get("surprise_ratio_pct") or 0),
+            "summary": (
+                "Sintese LLM indisponivel; julgamento aproximado a partir das features "
+                f"(sentiment_score={sentiment:.1f}, surpresa={features.get('surprise_ratio_pct', 0)}%)."
+            ),
+        }
+
     # ------------------------------------------------------------------
     # Analysis
     # ------------------------------------------------------------------
@@ -188,15 +252,64 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         """Busca noticias, classifica, computa features, persiste, sintetiza."""
         features, classifications = self.compute_features(asset)
 
-        # Synthesis via LLM (on top of computed features, not raw text)
-        feature_text = self._format_features(features)
-        prompt = f"Vetor de features de noticias para {asset}:\n\n{feature_text}\n\nSintetize o contexto narrativo."
-        if strategy_legenda:
-            prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
+        orion_llm: Optional[LlmProvenance] = None
 
-        response = self.llm.generate_response(self.synthesis_prompt, prompt)
-        data = extract_json_object(response)
+        if not features.get("news_total"):
+            data = {
+                "signal_type": "NEUTRAL",
+                "confidence": 40.0,
+                "regime": "TRANSITIONAL",
+                "regime_shift_probability": 0.0,
+                "summary": (
+                    "Nenhuma manchete recuperada do feed de noticias (RSS vazio ou indisponivel); "
+                    "contexto de noticias tratado como neutro."
+                ),
+            }
+            orion_llm = LlmProvenance(
+                provider="none",
+                model=None,
+                status="llm_skipped",
+                detail="no_rss_headlines",
+            )
+        else:
+            feature_text = self._format_features(features)
+            prompt = f"Vetor de features de noticias para {asset}:\n\n{feature_text}\n\nSintetize o contexto narrativo."
+            if strategy_legenda:
+                prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
 
+            classify_groq_failed = int(features.get("groq_classify_failures") or 0)
+            classify_parse_failed = int(features.get("classify_parse_failures") or 0)
+            synthesis_model: Optional[str] = None
+            synthesis_status = "llm_success"
+            synthesis_detail = "per_headline_classify_plus_synthesis"
+
+            try:
+                comp = self.llm.complete(self.synthesis_prompt, prompt)
+                data = extract_json_object(comp.text)
+                synthesis_model = comp.model
+            except RuntimeError:
+                data = self._synthesis_fallback_from_features(features)
+                synthesis_status = "llm_fallback"
+                synthesis_detail = "synthesis_groq_failed_rule_based"
+            except Exception:
+                data = self._synthesis_fallback_from_features(features)
+                synthesis_status = "llm_fallback"
+                synthesis_detail = "synthesis_parse_or_unknown_rule_based"
+
+            if classify_groq_failed or classify_parse_failed:
+                if synthesis_status == "llm_success":
+                    synthesis_status = "llm_partial"
+                synthesis_detail = (
+                    f"classify_groq_failed={classify_groq_failed},"
+                    f"classify_parse_failed={classify_parse_failed};{synthesis_detail}"
+                )
+
+            orion_llm = LlmProvenance(
+                provider="groq",
+                model=synthesis_model or str(self.llm.model),
+                status=synthesis_status,
+                detail=synthesis_detail,
+            )
         # Enrich features with regime
         features["regime"] = data.get("regime", "TRANSITIONAL")
         features["regime_shift_probability"] = data.get("regime_shift_probability", 0.0)
@@ -226,8 +339,8 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             confidence=float(data["confidence"]),
             summary=data["summary"],
             raw_data=raw_headlines,
+            llm_provenance=orion_llm,
         )
-
     def _format_features(self, features: Dict[str, Any]) -> str:
         lines = []
         for key, val in features.items():

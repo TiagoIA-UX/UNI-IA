@@ -9,7 +9,7 @@ from core.execution_engine_fast import evaluate_fast_path
 from core.feature_store import FeatureStore
 from core.outcome_tracker import OutcomeTracker
 from core.regime_engine import RegimeEngine
-from core.schemas import AgentFailure, AgentSignal, OpportunityAlert, SentinelGovernanceDecision, StrategyDecision
+from core.schemas import AgentFailure, AgentSignal, LlmProvenance, OpportunityAlert, SentinelGovernanceDecision, StrategyDecision
 from core.sentinel_decision_store import SentinelDecisionStore
 from core.system_state import SystemStateManager
 
@@ -183,6 +183,12 @@ class AnalysisService:
             confidence=round(float(confidence), 2),
             summary=summary,
             raw_data=f"volume_ratio={ratio:.6f}",
+            llm_provenance=LlmProvenance(
+                provider="none",
+                model=None,
+                status="llm_skipped",
+                detail="fast_scalp_volume_heuristic",
+            ),
         )
 
     def _analyze_fast_scalp(
@@ -215,6 +221,12 @@ class AnalysisService:
             confidence=confidence,
             summary=atlas_summary,
             raw_data=str(fast_path.get("features_used", {})),
+            llm_provenance=LlmProvenance(
+                provider="none",
+                model=None,
+                status="llm_skipped",
+                detail="fast_scalp_features_only",
+            ),
         )
         trends = self._trend_signal_from_atlas_features(asset, atlas_features)
 
@@ -319,6 +331,17 @@ class AnalysisService:
             agent_failures=[],
             integrity_score=100.0,
             fast_path_decision=decision,
+            agent_llm_provenance=(
+                {
+                    k: v
+                    for k, v in (
+                        ("ATLAS", atlas_signal.llm_provenance.model_dump() if atlas_signal.llm_provenance else None),
+                        ("TrendsAgent", trends.llm_provenance.model_dump() if trends.llm_provenance else None),
+                    )
+                    if v is not None
+                }
+                or None
+            ),
         )
 
         sentinel = SentinelAgent(
@@ -550,10 +573,19 @@ class AnalysisService:
 
         # === AEGIS — Fusao Ponderada ===
         aegis = AegisAgent(feature_store=self.feature_store, outcome_tracker=self.outcome_tracker)
-        alert = validate_opportunity_alert(
-            aegis.fuse(asset, agents_data, signal_id=sid, regime_context=regime_context, chart_timeframe=tf_norm),
-            expected_asset=asset,
+        fused, aegis_llm = aegis.fuse(
+            asset, agents_data, signal_id=sid, regime_context=regime_context, chart_timeframe=tf_norm
         )
+        alert = validate_opportunity_alert(fused, expected_asset=asset)
+
+        prov_map = {
+            sig.agent_name: sig.llm_provenance.model_dump()
+            for sig in agents_data
+            if sig.llm_provenance is not None
+        }
+        if aegis_llm:
+            prov_map["AEGIS"] = aegis_llm.model_dump()
+        alert.agent_llm_provenance = prov_map if prov_map else None
 
         # Ajuste de score por integridade (sem inflar: penaliza proporcional aos agentes que falharam).
         if integrity_score < 100.0 and float(alert.score) > 0:

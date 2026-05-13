@@ -21,6 +21,24 @@ class GroqClientTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 client.generate_response("sys", "user")
 
+    def test_complete_returns_groq_completion(self):
+        fake_create = MagicMock(
+            return_value=SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))]
+            )
+        )
+        fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create)))
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-key", "GROQ_MODEL": "llama-test"}, clear=True), patch(
+            "llm.groq_client.Groq", return_value=fake_client
+        ):
+            client = GroqClient()
+            out = client.complete("sys", "user")
+
+        self.assertEqual(out.text, '{"ok": true}')
+        self.assertEqual(out.model, "llama-test")
+        self.assertEqual(out.provider, "groq")
+
     def test_generate_response_uses_json_mode_by_default(self):
         fake_create = MagicMock(
             return_value=SimpleNamespace(

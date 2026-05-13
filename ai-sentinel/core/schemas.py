@@ -1,7 +1,6 @@
 
 from pydantic import BaseModel
-from typing import Any, List, Optional
-
+from typing import Any, Dict, List, Optional
 
 def model_to_dict(model: Any) -> dict:
     if model is None:
@@ -12,6 +11,23 @@ def model_to_dict(model: Any) -> dict:
         return model.dict()
     raise TypeError(f"Objeto nao suportado para serializacao: {type(model)!r}")
 
+
+class LlmProvenance(BaseModel):
+    """Rastreabilidade da inferência LLM (Groq) no sinal — transparência para auditoria e UI.
+
+    status (contrato estável):
+      - llm_success: saída principal produzida pelo Groq.
+      - llm_skipped: fluxo intencionalmente sem LLM (ex.: sem dados upstream).
+      - llm_fallback: saída por heurística/regra após falha ou política local.
+      - llm_partial: LLM usado em parte do pipeline; subtarefas degradadas (ex.: classificação).
+    """
+
+    provider: str  # groq | none
+    model: Optional[str] = None
+    status: str
+    detail: Optional[str] = None
+
+
 class AgentSignal(BaseModel):
     """Sinal individual emitido por um dos agentes base"""
     agent_name: str
@@ -20,6 +36,7 @@ class AgentSignal(BaseModel):
     confidence: float # 0 a 100
     summary: str
     raw_data: Optional[str] = None
+    llm_provenance: Optional[LlmProvenance] = None
 
 
 class StrategyDecision(BaseModel):
@@ -70,3 +87,4 @@ class OpportunityAlert(BaseModel):
     agent_failures: List[AgentFailure] = []
     integrity_score: float = 100.0
     fast_path_decision: Optional[str] = None
+    agent_llm_provenance: Optional[Dict[str, Any]] = None

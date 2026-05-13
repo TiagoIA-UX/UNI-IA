@@ -12,6 +12,27 @@ A versionagem segue [Semantic Versioning](https://semver.org/lang/pt-BR/) onde a
 
 ---
 
+## [1.4.0] — 2026-05-13
+
+### Adicionado
+
+- **Transparência LLM:** modelo `LlmProvenance` e campo opcional `llm_provenance` em `AgentSignal`; mapa agregado `agent_llm_provenance` em `OpportunityAlert` (inclui agentes do pipeline + **AEGIS**).
+- **`GroqClient.complete()`** devolve `GroqCompletion` (texto + modelo + `provider`) para rastreio; `generate_response` permanece como atalho.
+- **UI (plataforma):** linha «Transparência LLM» nos Guardiões quando o backend envia `agent_llm_provenance`.
+
+### Alterado
+
+- **AEGIS:** `fuse` passa a devolver `Tuple[OpportunityAlert, LlmProvenance]`.
+- **ORION:** contadores `groq_classify_failures` / `classify_parse_failures` nas features; provenance com estados `llm_success`, `llm_partial`, `llm_fallback`, `llm_skipped`.
+
+### Testes
+
+- `tests/test_analysis_pipeline_e2e.py` — pipeline com mocks (yfinance, RSS, Groq).
+- `tests/test_llm_provenance_schema.py` — serialização Pydantic.
+- **CI:** passo `python -m unittest discover` para `ai-sentinel`.
+
+---
+
 ## [1.3.2] — 2026-05-12
 
 ### Corrigido

@@ -4,7 +4,7 @@ from typing import Optional
 import requests
 from bs4 import BeautifulSoup
 from core.feature_store import FeatureStore
-from core.schemas import AgentSignal
+from core.schemas import AgentSignal, LlmProvenance
 from llm.groq_client import GroqClient
 from llm.json_utils import extract_json_object
 
@@ -58,10 +58,10 @@ class NewsAgent:
         if strategy_legenda:
             prompt = f"[Contexto por timeframe]\n{strategy_legenda}\n\n{prompt}"
         
-        response = self.llm.generate_response(self.system_prompt, prompt)
-        
+        comp = self.llm.complete(self.system_prompt, prompt)
+
         # Extrai JSON sem placeholders
-        data = extract_json_object(response)
+        data = extract_json_object(comp.text)
 
         if signal_id:
             self.feature_store.persist(
@@ -89,5 +89,11 @@ class NewsAgent:
             confidence=float(data["confidence"]),
             summary=data["summary"],
             # Armazenamos a notícia raw_news no summary temporariamente para o SentimentAgent poder ler depois
-            raw_data=raw_news 
+            raw_data=raw_news,
+            llm_provenance=LlmProvenance(
+                provider=comp.provider,
+                model=comp.model,
+                status="llm_success",
+                detail="news_batch",
+            ),
         )

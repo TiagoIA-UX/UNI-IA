@@ -19,16 +19,17 @@ nunca para gerar os numeros.
 
 import math
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
-import yfinance as yf
 import numpy as np
+import pandas as pd
+import yfinance as yf
 
-from adapters.mercadobitcoin_market import get_ticker as get_mb_ticker, normalize_mb_market
+from adapters.mercadobitcoin_market import get_candles as get_mb_candles, get_ticker as get_mb_ticker, normalize_mb_market
 from agents.market_utils import resolve_market_ticker
 from core.chart_timeframes import yf_interval_period
 from core.feature_store import FeatureStore
-from core.schemas import AgentSignal
+from core.schemas import AgentSignal, LlmProvenance
 from llm.groq_client import GroqClient
 from llm.json_utils import extract_json_object
 
@@ -74,6 +75,40 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     def _get_ticker(self, asset: str) -> str:
         return resolve_market_ticker(asset)
 
+    @staticmethod
+    def _mb_hist_to_dataframe(rows: list) -> pd.DataFrame:
+        if not rows or len(rows) < 5:
+            return pd.DataFrame()
+        return pd.DataFrame(
+            {
+                "Open": [float(r["open"]) for r in rows],
+                "High": [float(r["high"]) for r in rows],
+                "Low": [float(r["low"]) for r in rows],
+                "Close": [float(r["close"]) for r in rows],
+                "Volume": [float(r.get("volume", 0) or 0) for r in rows],
+            },
+            index=pd.to_datetime([r["time"] for r in rows], utc=True),
+        )
+
+    def _try_mb_history_frames(self, asset: str) -> Optional[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+        """Quando yfinance nao entrega barras (rate limit, dados vazios), usa candles publicos MB."""
+        try:
+            normalize_mb_market(asset)
+        except Exception:
+            return None
+        try:
+            daily_rows = get_mb_candles(asset, 86400, limit=120)
+            hist_1d = self._mb_hist_to_dataframe(daily_rows)
+            if len(hist_1d) < 20:
+                return None
+            h1_rows = get_mb_candles(asset, 3600, limit=120)
+            hist_1h = self._mb_hist_to_dataframe(h1_rows)
+            m15_rows = get_mb_candles(asset, 900, limit=120)
+            hist_15m = self._mb_hist_to_dataframe(m15_rows)
+            return hist_1d, hist_1h, hist_15m
+        except Exception:
+            return None
+
     # ------------------------------------------------------------------
     # Feature computation (puro numpy, zero LLM)
     # ------------------------------------------------------------------
@@ -91,10 +126,21 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             hist_1h = fut_1h.result()
             hist_15m = fut_15m.result()
 
+        mb_frames: Optional[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]] = None
         if hist_1d.empty or len(hist_1d) < 20:
-            raise ValueError(f"Dados insuficientes para ATLAS computar features de {asset}.")
+            mb_frames = self._try_mb_history_frames(asset)
+            if mb_frames is not None:
+                hist_1d, hist_1h, hist_15m = mb_frames
+            else:
+                raise ValueError(
+                    f"Dados insuficientes para ATLAS (yfinance e Mercado Bitcoin) para {asset}. "
+                    "Confirme par BRL (ex.: BTC-BRL) e ligacao de rede."
+                )
 
-        features: Dict[str, Any] = {"asset": asset}
+        features: Dict[str, Any] = {
+            "asset": asset,
+            "price_history_source": "mercadobitcoin_public" if mb_frames is not None else "yfinance",
+        }
 
         # --- Price basics ---
         close_1d = hist_1d["Close"].values
@@ -496,8 +542,8 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
                 "De peso extra as features prefixadas com user_chart_tf_ quando existirem."
             )
 
-        response = self.llm.generate_response(self.system_prompt, prompt)
-        data = extract_json_object(response)
+        comp = self.llm.complete(self.system_prompt, prompt)
+        data = extract_json_object(comp.text)
 
         if signal_id:
             self.feature_store.persist(
@@ -521,6 +567,12 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             confidence=float(data["confidence"]),
             summary=data["summary"],
             raw_data=feature_text,
+            llm_provenance=LlmProvenance(
+                provider=comp.provider,
+                model=comp.model,
+                status="llm_success",
+                detail="structural_interpretation",
+            ),
         )
 
     def _format_features(self, features: Dict[str, Any]) -> str:

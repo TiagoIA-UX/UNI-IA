@@ -10,7 +10,7 @@ Diferenca do antigo StrategyEngine:
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.chart_timeframes import (
     DEFAULT_AEGIS_WEIGHTS,
@@ -29,7 +29,7 @@ from core.contract_validation import (
 from core.feature_store import FeatureStore
 from core.outcome_tracker import OutcomeTracker
 from core.regime_engine import RegimeContext
-from core.schemas import AgentSignal, OpportunityAlert, StrategyDecision
+from core.schemas import AgentSignal, LlmProvenance, OpportunityAlert, StrategyDecision
 from llm.groq_client import GroqClient
 from llm.json_utils import extract_json_object
 
@@ -159,8 +159,8 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         signal_id: Optional[str] = None,
         regime_context: Optional[RegimeContext] = None,
         chart_timeframe: Optional[str] = None,
-    ) -> OpportunityAlert:
-        """Fusao ponderada dos sinais dos agentes."""
+    ) -> Tuple[OpportunityAlert, LlmProvenance]:
+        """Fusao ponderada dos sinais dos agentes. Retorna (alerta, provenance Groq da fusao)."""
         weights = self._get_effective_weights(regime_context=regime_context, chart_timeframe=chart_timeframe)
 
         # Compute weighted bias
@@ -231,8 +231,8 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         legenda = timeframe_strategy_legenda(tf_for_legenda)
         prompt = f"[Contexto por timeframe — AEGIS]\n{legenda}\n\n{prompt}"
 
-        response = self.llm.generate_response(self.system_prompt, prompt)
-        data = extract_json_object(response)
+        comp = self.llm.complete(self.system_prompt, prompt)
+        data = extract_json_object(comp.text)
 
         validate_required_keys(
             data,
@@ -286,6 +286,13 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
                 },
             )
 
+        aegis_llm = LlmProvenance(
+            provider=comp.provider,
+            model=comp.model,
+            status="llm_success",
+            detail="weighted_fusion",
+        )
+
         alert = OpportunityAlert(
             asset=asset,
             score=score,
@@ -296,7 +303,7 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             chart_timeframe=chart_timeframe.strip() if chart_timeframe else None,
         )
 
-        return alert
+        return alert, aegis_llm
 
     def _operational_status(self, classification: str) -> str:
         if classification == "OPORTUNIDADE":
