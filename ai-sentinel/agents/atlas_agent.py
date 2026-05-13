@@ -47,7 +47,7 @@ def _safe(val: Any, decimals: int = 6) -> Any:
 
 
 # Timeframes onde a estrutura HH/HL/LH/LL e calculada no proprio intervalo do grafico (topos/fundos locais).
-_USER_CHART_SWING_STRUCTURE_TFS = frozenset({"1m", "2m", "5m", "15m", "30m"})
+_USER_CHART_SWING_STRUCTURE_TFS = frozenset({"1m", "2m", "5m", "15m", "30m", "1h", "90m", "4h", "1d", "1wk", "1mo", "3mo"})
 
 
 class AtlasAgent:
