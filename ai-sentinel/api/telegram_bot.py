@@ -1,7 +1,7 @@
 import html
 import os
 import time
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 from core.contract_validation import normalize_classification
@@ -13,6 +13,18 @@ def _env_truthy(key: str, default: bool = False) -> bool:
     if raw is None or str(raw).strip() == "":
         return default
     return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def normalize_telegram_dispatch_result(raw: Any) -> Dict[str, Any]:
+    """Compat com `dispatch_alert` dict ou valor legado bool."""
+    if isinstance(raw, dict):
+        return {
+            "success": bool(raw.get("success", True)),
+            "dispatched": bool(raw.get("dispatched")),
+            "gate_reason": raw.get("gate_reason"),
+            "error": raw.get("error"),
+        }
+    return {"success": True, "dispatched": bool(raw), "gate_reason": None, "error": None}
 
 
 class UniIATelegramBot:
@@ -103,6 +115,32 @@ class UniIATelegramBot:
 
         return True, "ok"
 
+    @staticmethod
+    def _infer_quote_bucket(asset: str) -> str:
+        """Moeda de cotacao inferida pelo sufixo do par (ex.: BTCBRL -> BRL, BTCUSDT -> USDT)."""
+        u = (asset or "").upper().replace("-", "").replace("/", "")
+        if u.endswith("BRL"):
+            return "BRL"
+        for suf in ("USDT", "USDC", "BUSD", "DAI"):
+            if u.endswith(suf):
+                return "STABLE_USD"
+        if u.endswith("USD"):
+            return "USD"
+        if u.endswith("EUR"):
+            return "EUR"
+        if u.endswith("GBP"):
+            return "GBP"
+        return "UNKNOWN"
+
+    def _route_premium_by_quote(self, alert: OpportunityAlert) -> bool:
+        """Premium = cotacao internacional (USD/stable/EUR/GBP); Free = BRL e desconhecido (por defeito)."""
+        bucket = self._infer_quote_bucket(alert.asset or "")
+        if bucket == "BRL":
+            return False
+        if bucket in {"USD", "STABLE_USD", "EUR", "GBP"}:
+            return True
+        return _env_truthy("TELEGRAM_UNKNOWN_QUOTE_TO_PREMIUM", False)
+
     def _post_message(self, token: str, chat_id: str, message: str, parse_mode: Optional[str] = "HTML"):
         last_err = None
         base_url = f"https://api.telegram.org/bot{token}"
@@ -134,33 +172,34 @@ class UniIATelegramBot:
         if not self.bot_token:
             raise RuntimeError("TELEGRAM_BOT_TOKEN nao configurado para comandos administrativos.")
         self._post_message(self.bot_token, chat_id, message, parse_mode=None)
-        
-    def dispatch_alert(self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None) -> bool:
+
+    def dispatch_alert(
+        self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         """
-        Método central do robô UNI IA.
-        Decide o destino do sinal baseado nas regras de negócio (Free vs Premium).
+        Envia para Free ou Premium conforme a moeda de cotacao do par.
 
         Returns:
-            True se uma mensagem foi enviada a Free ou Premium; False se bloqueado pelos gates.
+            success: False apenas em falha de rede/API Telegram.
+            dispatched: True se uma mensagem foi enviada.
+            gate_reason: preenchido quando gates suprimiram o envio (nao e falha operacional).
         """
         self._validate_config()
 
         ok, reason = self._should_dispatch_public_alert(alert)
         if not ok:
             print(f"Telegram: envio publico ignorado ({reason}) — {alert.asset}")
-            return False
+            return {"success": True, "dispatched": False, "gate_reason": reason, "error": None}
 
-        # Premium para ativos com USD/EUR/BRL no par.
-        premium_assets = ["USD", "EUR", "BRL", "BTC", "ETH", "SOL"]
-        normalized_asset = (alert.asset or "").upper()
-        is_premium_asset = any(code in normalized_asset for code in premium_assets)
-        
-        if is_premium_asset:
-            self._send_to_premium(alert, operational_context)
-        else:
-            self._send_to_free(alert, operational_context)
-        return True
-            
+        try:
+            if self._route_premium_by_quote(alert):
+                self._send_to_premium(alert, operational_context)
+            else:
+                self._send_to_free(alert, operational_context)
+            return {"success": True, "dispatched": True, "gate_reason": None, "error": None}
+        except Exception as exc:
+            return {"success": False, "dispatched": False, "gate_reason": None, "error": str(exc)}
+
     def _format_message(self, alert: OpportunityAlert, is_premium: bool, operational_context: Optional[Dict[str, str]] = None) -> str:
         """Formata o alerta em HTML (parse_mode HTML) com escape de conteudo dinamico."""
         def esc(s: object) -> str:

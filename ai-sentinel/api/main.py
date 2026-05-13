@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # Importações originais do sistema
 from api.analysis_service import AnalysisService
 from api.audit_service import AuditService
-from api.telegram_bot import UniIATelegramBot
+from api.telegram_bot import UniIATelegramBot, normalize_telegram_dispatch_result
 from api.telegram_control import TelegramControlService
 from api.copy_trade import CopyTradeService
 from api.desk import PrivateDesk
@@ -184,11 +184,18 @@ def _run_analyze_side_effects(alert, desk_preview: Dict[str, Any]) -> None:
     """Telegram, mesa e registo ARGUS (apos /api/analyze devolver JSON)."""
     try:
         try:
-            dispatched = bool(
-                telegram_bot.dispatch_alert(alert, operational_context=desk_preview)
-            )
-            if not dispatched:
+            raw = telegram_bot.dispatch_alert(alert, operational_context=desk_preview)
+            tg = normalize_telegram_dispatch_result(raw)
+            if tg["success"] and not tg["dispatched"] and tg.get("gate_reason"):
+                logger.info(
+                    "Telegram gate suprimiu envio (%s) — %s",
+                    tg["gate_reason"],
+                    alert.asset,
+                )
+            elif tg["success"] and not tg["dispatched"]:
                 logger.info("Telegram: nenhuma mensagem publica (filtros/gates ou skip).")
+            elif not tg["success"]:
+                logger.error("Falha no despacho Telegram: %s", tg.get("error"))
         except Exception as telegram_error:
             logger.error("Falha no despacho Telegram: %s", telegram_error)
 
@@ -260,14 +267,19 @@ def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) ->
         telegram_result: Dict[str, Any] = {"success": True, "async": True, "dispatched": None}
         desk_result: Dict[str, Any] = {"success": True, "async": True, "action": "pending"}
     else:
-        telegram_result = {"success": True, "dispatched": False}
+        telegram_result: Dict[str, Any] = {"success": True, "dispatched": False}
         try:
-            telegram_result["dispatched"] = bool(
-                telegram_bot.dispatch_alert(alert, operational_context=desk_preview)
-            )
+            raw = telegram_bot.dispatch_alert(alert, operational_context=desk_preview)
+            telegram_result.update(normalize_telegram_dispatch_result(raw))
+            telegram_result["async"] = False
         except Exception as telegram_error:
             logger.error(f"Falha no despacho Telegram: {telegram_error}")
-            telegram_result = {"success": False, "dispatched": False, "error": str(telegram_error)}
+            telegram_result = {
+                "success": False,
+                "dispatched": False,
+                "error": str(telegram_error),
+                "async": False,
+            }
 
         try:
             desk_result = private_desk.handle_alert(alert)

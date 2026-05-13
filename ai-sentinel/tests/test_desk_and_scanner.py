@@ -27,7 +27,7 @@ if "pydantic" not in sys.modules and importlib.util.find_spec("pydantic") is Non
 
 from api.desk import PrivateDesk
 from api.signal_scanner import SignalScanner
-from core.schemas import OpportunityAlert, model_to_dict
+from core.schemas import OpportunityAlert, StrategyDecision, model_to_dict
 from core.system_state import SystemStateManager, SystemStatus, UniIAMode
 
 
@@ -103,7 +103,7 @@ class _FakeTelegramBot:
     def dispatch_alert(self, alert, operational_context=None):
         if self.should_fail:
             raise RuntimeError("telegram_dispatch_failed")
-        return True
+        return {"success": True, "dispatched": True, "gate_reason": None, "error": None}
 
 
 class _FakeAnalysisService:
@@ -257,6 +257,72 @@ class DeskAndScannerTests(unittest.TestCase):
             desk, _ = self._build_desk("live", "ready")
             cfg = desk.status()["desk"]
         self.assertFalse(cfg["manual_approval"])
+
+    def test_scanner_strict_operational_mode_falls_back_to_desk_mode(self):
+        """Quando `UNI_IA_MODE` esta vazio, o scanner alinha ao `DESK_MODE` (ex.: .env legado)."""
+        desk, _ = self._build_desk("paper", "ready")
+        with patch.dict("os.environ", {**self.base_env, "UNI_IA_MODE": "", "DESK_MODE": "live"}, clear=False):
+            scanner = SignalScanner(
+                analysis_service=_FakeAnalysisService(self.alert),
+                telegram_bot=_FakeTelegramBot(),
+                private_desk=desk,
+                audit_service=_FakeAuditService(),
+                system_state=None,
+            )
+            self.assertTrue(scanner._strict_operational_mode())
+
+    def test_scanner_marks_dispatch_blocked_when_telegram_gate_suppresses(self):
+        state = SystemStateManager(UniIAMode.PAPER)
+        state.status = SystemStatus.READY
+        alert = OpportunityAlert(
+            asset="BTCUSDT",
+            score=90,
+            classification="OPORTUNIDADE",
+            explanation="Setup.",
+            sources=["test"],
+            strategy=StrategyDecision(
+                mode="swing",
+                direction="long",
+                timeframe="1h",
+                confidence=80.0,
+                operational_status="ok",
+                reasons=["test"],
+            ),
+        )
+
+        class _GateBot:
+            def dispatch_alert(self, alert, operational_context=None):
+                return {
+                    "success": True,
+                    "dispatched": False,
+                    "gate_reason": "fast_path_block",
+                    "error": None,
+                }
+
+        recorded = []
+
+        def _capture(**kw):
+            recorded.append(dict(kw))
+
+        with patch.dict("os.environ", {**self.base_env, "UNI_IA_MODE": "paper"}, clear=False):
+            desk = PrivateDesk(
+                copy_trade_service=_FakeCopyTradeService(),
+                audit_service=_FakeAuditService(),
+                desk_store=_FakeDeskStore(),
+                system_state=state,
+            )
+            scanner = SignalScanner(
+                analysis_service=_FakeAnalysisService(alert),
+                telegram_bot=_GateBot(),
+                private_desk=desk,
+                audit_service=_FakeAuditService(),
+                system_state=state,
+            )
+            with patch.object(scanner, "_record_dispatch_event", side_effect=_capture):
+                scanner.scan_asset("BTCUSDT")
+
+        self.assertTrue(recorded)
+        self.assertEqual(recorded[-1]["status"], "blocked")
 
     def test_scanner_locked_returns_blocked(self):
         state = SystemStateManager(UniIAMode.LIVE)

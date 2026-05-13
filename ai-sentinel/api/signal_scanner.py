@@ -14,7 +14,7 @@ from core.schemas import OpportunityAlert, model_to_dict
 from core.chart_timeframes import normalize_chart_timeframe, public_timeframes_catalog
 from core.signal_lifecycle import candle_key, last_closed_candle_end
 
-
+from api.telegram_bot import normalize_telegram_dispatch_result
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -198,9 +198,15 @@ class SignalScanner:
         allowed_classifications_raw = os.getenv("SIGNAL_ALLOWED_CLASSIFICATIONS", "OPORTUNIDADE")
         assets = [asset.strip().upper() for asset in assets_raw.split(",") if asset.strip()]
         timeframes = self._parse_timeframes(timeframes_raw)
-        allowed_classifications = [
-            item.strip().upper() for item in allowed_classifications_raw.split(",") if item.strip()
-        ]
+        allowed_classifications: List[str] = []
+        for item in allowed_classifications_raw.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            try:
+                allowed_classifications.append(normalize_classification(item))
+            except Exception:
+                allowed_classifications.append(item.upper())
         return {
             "enabled": os.getenv("SIGNAL_SCANNER_ENABLED", "false").lower() == "true",
             "assets": assets,
@@ -296,29 +302,44 @@ class SignalScanner:
     def _is_eligible(self, alert: OpportunityAlert, cfg: Dict[str, Any]) -> bool:
         if float(alert.score) < cfg["min_score"]:
             return False
-        if float(cfg.get("min_integrity_score") or 0) > 0 and float(alert.integrity_score) < float(cfg["min_integrity_score"]):
+        integ = float(getattr(alert, "integrity_score", 100.0) or 100.0)
+        if float(cfg.get("min_integrity_score") or 0) > 0 and integ < float(cfg["min_integrity_score"]):
             return False
         if cfg["allowed_classifications"] and normalize_classification(alert.classification) not in cfg["allowed_classifications"]:
             return False
         return True
 
-    def _strict_operational_mode(self) -> bool:
+    def _scanner_runtime_mode(self) -> str:
         if self.system_state:
-            return self.system_state.mode.value in {"approval", "live"}
-        return os.getenv("UNI_IA_MODE", "paper").lower() in {"approval", "live"}
+            return str(self.system_state.mode.value).lower()
+        uni = (os.getenv("UNI_IA_MODE") or "").strip()
+        if uni:
+            return uni.lower()
+        return (os.getenv("DESK_MODE", "paper") or "paper").strip().lower()
 
+    def _strict_operational_mode(self) -> bool:
+        return self._scanner_runtime_mode() in {"approval", "live"}
     def _dispatch_telegram(self, alert: OpportunityAlert, preview: Dict[str, Any]) -> Dict[str, Any]:
-        if self._strict_operational_mode():
-            dispatched = bool(self.telegram_bot.dispatch_alert(alert, operational_context=preview))
-            return {"success": True, "dispatched": dispatched}
-
         try:
-            dispatched = bool(self.telegram_bot.dispatch_alert(alert, operational_context=preview))
-            return {"success": True, "dispatched": dispatched}
+            raw = self.telegram_bot.dispatch_alert(alert, operational_context=preview)
+            tg = normalize_telegram_dispatch_result(raw)
+            if self._strict_operational_mode():
+                if not tg["success"]:
+                    raise RuntimeError(tg.get("error") or "telegram_dispatch_failed")
+                return {
+                    "success": True,
+                    "dispatched": tg["dispatched"],
+                    "gate_reason": tg.get("gate_reason"),
+                    "error": None,
+                }
+            return tg
         except Exception as telegram_error:
+            if self._strict_operational_mode():
+                raise
             return {
                 "success": False,
                 "dispatched": False,
+                "gate_reason": None,
                 "error": str(telegram_error),
             }
 
@@ -526,7 +547,16 @@ class SignalScanner:
             if dispatch_result["desk"].get("request_id"):
                 result["request_id"] = dispatch_result["desk"]["request_id"]
             result["operational_status"] = dispatch_result["preview"].get("operational_status")
-            dispatch_status = "sent" if result["dispatched"] else "failed"
+            tg = dispatch_result["telegram"]
+            if tg.get("dispatched"):
+                dispatch_status = "sent"
+            elif tg.get("gate_reason"):
+                dispatch_status = "blocked"
+            elif not tg.get("success"):
+                dispatch_status = "failed"
+            else:
+                dispatch_status = "blocked"
+            log_error = None if dispatch_status != "failed" else tg.get("error")
             self._record_dispatch_event(
                 signal_id=signal_id,
                 status=dispatch_status,
@@ -535,7 +565,7 @@ class SignalScanner:
                 preview=dispatch_result["preview"],
                 telegram=dispatch_result["telegram"],
                 desk=dispatch_result["desk"],
-                error=dispatch_result["telegram"].get("error"),
+                error=log_error,
             )
             self._audit(
                 "signal.generated",

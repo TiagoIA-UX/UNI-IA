@@ -156,7 +156,50 @@ class TelegramDispatchGateTests(unittest.TestCase):
             with patch.object(bot, "_post_message") as post:
                 sent = bot.dispatch_alert(alert)
         post.assert_not_called()
-        self.assertFalse(sent)
+        self.assertIsInstance(sent, dict)
+        self.assertFalse(sent.get("dispatched"))
+        self.assertTrue(sent.get("success"))
+        self.assertEqual(sent.get("gate_reason"), "sentinel_nao_aprovou")
+
+    def test_route_premium_stable_quote_suffix(self):
+        bot = UniIATelegramBot()
+        strat = StrategyDecision(
+            mode="swing",
+            direction="long",
+            timeframe="1h",
+            confidence=80.0,
+            operational_status="ok",
+            reasons=["t"],
+        )
+        alert = OpportunityAlert(
+            asset="BTC-USDT",
+            score=80.0,
+            classification="OPORTUNIDADE",
+            explanation="t",
+            sources=[],
+            strategy=strat,
+        )
+        self.assertTrue(bot._route_premium_by_quote(alert))
+
+    def test_route_free_brl_quote_suffix(self):
+        bot = UniIATelegramBot()
+        strat = StrategyDecision(
+            mode="swing",
+            direction="long",
+            timeframe="1h",
+            confidence=80.0,
+            operational_status="ok",
+            reasons=["t"],
+        )
+        alert = OpportunityAlert(
+            asset="BTCBRL",
+            score=80.0,
+            classification="OPORTUNIDADE",
+            explanation="t",
+            sources=[],
+            strategy=strat,
+        )
+        self.assertFalse(bot._route_premium_by_quote(alert))
 
 
 if __name__ == "__main__":
