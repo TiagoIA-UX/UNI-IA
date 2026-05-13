@@ -5,7 +5,7 @@ ATLAS le estrutura e fluxo.
 
 Features computadas (nao opinadas):
   - Market structure: HH/HL/LH/LL detection
-  - Break of structure (BOS)
+  - Break of structure (BOS) e Change of Character (CHoCH)
   - ATR regime (volatilidade normalizada)
   - Volume profile (VWAP, volume anomaly, relative volume)
   - Multi-timeframe momentum (RSI, MACD cross)
@@ -64,12 +64,16 @@ Regras:
 1. NUNCA invente numeros. Use APENAS os fornecidos.
 2. Analise a confluencia entre timeframes.
 3. Identifique se a estrutura permite risco (entrada) ou nao.
+4. Priorize features de estrutura: structure_bos, structure_choch, structure_pattern, structure_trend.
+5. BOS (Break of Structure) confirmado = continuidade da tendencia vigente.
+6. CHoCH (Change of Character) confirmado = possivel reversao — aumente peso se presente.
+7. Para scalping (M1-M15): user_chart_tf_structure_bos e user_chart_tf_structure_choch sao o gatilho principal.
 
 Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
 {
     "signal_type": "STRONG BUY" ou "BUY" ou "NEUTRAL" ou "SELL" ou "STRONG SELL",
     "confidence": 85.5,
-    "summary": "Interpretacao estrutural objetiva baseada nas features."
+    "summary": "Interpretacao estrutural objetiva: mencione BOS/CHoCH se presentes."
 }"""
 
     def _get_ticker(self, asset: str) -> str:
@@ -279,10 +283,12 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             features["vwap_1h_dist_pct"] = None
 
         # --- Market Structure: HH/HL/LH/LL detection ---
-        structure = self._detect_market_structure(high_1d, low_1d)
+        structure = self._detect_market_structure(high_1d, low_1d, close_1d)
         features["structure_pattern"] = structure["pattern"]
         features["structure_trend"] = structure["trend"]
         features["structure_bos"] = structure["bos"]
+        features["structure_choch"] = bool(structure.get("choch"))
+        features["structure_choch_direction"] = structure.get("choch_direction")
         features["structure_swing_high"] = _safe(structure["swing_high"])
         features["structure_swing_low"] = _safe(structure["swing_low"])
 
@@ -433,10 +439,14 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             hi = hist["High"].values.astype(float)
             lo = hist["Low"].values.astype(float)
             if len(hi) >= 10:
-                st = self._detect_market_structure(hi, lo)
+                st = self._detect_market_structure(hi, lo, close)
                 features["user_chart_tf_structure_pattern"] = st.get("pattern")
                 features["user_chart_tf_structure_trend"] = st.get("trend")
                 features["user_chart_tf_structure_bos"] = bool(st.get("bos"))
+                features["user_chart_tf_structure_choch"] = bool(st.get("choch"))
+                features["user_chart_tf_structure_choch_direction"] = st.get("choch_direction")
+                features["user_chart_tf_swing_high"] = _safe(st.get("swing_high"))
+                features["user_chart_tf_swing_low"] = _safe(st.get("swing_low"))
 
     # ------------------------------------------------------------------
     # Helpers
@@ -454,12 +464,23 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
     def _ema_from_series(self, data: np.ndarray, period: int) -> float:
         return self._ema(data, period)
 
-    def _detect_market_structure(self, highs: np.ndarray, lows: np.ndarray) -> Dict[str, Any]:
-        """Detecta HH/HL/LH/LL e Break of Structure."""
+    def _detect_market_structure(
+        self,
+        highs: np.ndarray,
+        lows: np.ndarray,
+        closes: Optional[np.ndarray] = None,
+    ) -> Dict[str, Any]:
+        """Detecta HH/HL/LH/LL, BOS e CHoCH.
+
+        Usa o ultimo *close* quando `closes` tem o mesmo comprimento que highs/lows;
+        caso contrario usa a media (high+low)/2 do ultimo candle como fallback.
+        """
         result: Dict[str, Any] = {
             "pattern": "undefined",
             "trend": "undefined",
             "bos": False,
+            "choch": False,
+            "choch_direction": None,
             "swing_high": None,
             "swing_low": None,
         }
@@ -467,7 +488,6 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
         if len(highs) < 10:
             return result
 
-        # Find swing points (simplified: local extremes over 5-bar window)
         swing_highs = []
         swing_lows = []
         for i in range(2, len(highs) - 2):
@@ -508,12 +528,27 @@ Sua saida DEVE ser UNICA E EXCLUSIVAMENTE um JSON estrito:
             result["pattern"] = "mixed"
             result["trend"] = "neutral"
 
-        # BOS: preco atual rompeu ultimo swing high ou low
-        current_close = float(highs[-1])  # approximate with last high
-        if current_close > last_sh:
-            result["bos"] = True
-        elif float(lows[-1]) < last_sl:
-            result["bos"] = True
+        if closes is not None and len(closes) == len(highs) and len(closes) > 0:
+            current_close = float(closes[-1])
+        else:
+            current_close = float((highs[-1] + lows[-1]) / 2.0)
+
+        trend = result["trend"]
+        if trend == "bullish":
+            if current_close > last_sh:
+                result["bos"] = True
+            if current_close < last_sl:
+                result["choch"] = True
+                result["choch_direction"] = "bearish"
+        elif trend == "bearish":
+            if current_close < last_sl:
+                result["bos"] = True
+            if current_close > last_sh:
+                result["choch"] = True
+                result["choch_direction"] = "bullish"
+        else:
+            if current_close > last_sh or current_close < last_sl:
+                result["bos"] = True
 
         return result
 
