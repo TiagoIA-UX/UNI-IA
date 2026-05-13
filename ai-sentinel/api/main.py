@@ -221,6 +221,21 @@ def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) ->
     agent_scores = _collect_agent_scores(signal_id, alert) if signal_id else {}
     agent_failures = [f.dict() for f in (alert.agent_failures or [])]
 
+    tf_snap = chart_timeframe or alert.chart_timeframe
+    try:
+        analysis_service.record_plataforma_signal(
+            alert.asset,
+            tf_snap,
+            {
+                "alert_data": alert.dict(),
+                "agent_scores": agent_scores,
+                "agent_failures": agent_failures,
+                "fast_path_decision": alert.fast_path_decision,
+            },
+        )
+    except Exception as cache_err:
+        logger.warning("record_plataforma_signal: %s", cache_err)
+
     return {
         "success": True,
         "data": alert.dict(),
@@ -230,6 +245,130 @@ def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) ->
         "fast_path_decision": alert.fast_path_decision,
         "telegram": telegram_result,
         "desk": desk_result,
+    }
+
+
+def _normalize_asset_compact(asset: str) -> str:
+    return (asset or "").strip().upper().replace("-", "")
+
+
+def _infer_news_gate_suppressed(alert_data: Dict[str, Any], agent_failures: List[Dict[str, Any]]) -> bool:
+    """Heuristica: noticia / gate ORION-NEWS quando o fluxo ficou bloqueado."""
+    chunks: List[str] = []
+    strat = alert_data.get("strategy") or {}
+    if isinstance(strat, dict):
+        for r in strat.get("reasons") or []:
+            chunks.append(str(r))
+    chunks.append(str(alert_data.get("explanation") or ""))
+    expl_blob = " ".join(chunks).lower()
+    news_hints = (
+        "noticia",
+        "notícia",
+        "news",
+        "arara",
+        "newsagent",
+        "hot headline",
+        "janela de risco",
+        "cpi",
+        "copom",
+        "fomc",
+        "selic",
+    )
+    if any(h in expl_blob for h in news_hints):
+        return True
+    for f in agent_failures:
+        an = str(f.get("agent_name") or "")
+        msg = str(f.get("error_message") or "").lower()
+        if an in {"NewsAgent", "ORION"} and any(k in msg for k in ("news", "noticia", "gate", "hot", "block", "shock")):
+            return True
+    return False
+
+
+def _build_signal_summary_payload(asset: str, timeframe: Optional[str]) -> Dict[str, Any]:
+    """Constroi resposta plana para a mesa (UI). Usa cache do ultimo POST /api/analyze no mesmo TF."""
+    norm_asset = _normalize_asset_compact(asset)
+    tf = normalize_chart_timeframe(timeframe) if timeframe else None
+    if not tf:
+        tf = normalize_chart_timeframe("1h")
+    if not tf:
+        tf = "1h"
+
+    cached = analysis_service.get_plataforma_signal(norm_asset, tf)
+    ranking = analysis_service.outcome_tracker.asset_hit_ranking(
+        timeframe=tf,
+        window_days=90,
+        min_trades=1,
+    )
+    hit_rate_pct: Optional[float] = None
+    hit_rate_trades: Optional[int] = None
+    for it in ranking.get("items") or []:
+        if _normalize_asset_compact(str(it.get("asset") or "")) == norm_asset:
+            trades = int(it.get("trades") or 0)
+            if trades >= 5:
+                hit_rate_pct = round(float(it.get("hit_rate_pct") or 0.0), 2)
+                hit_rate_trades = trades
+            break
+
+    if not cached:
+        return {
+            "asset": norm_asset,
+            "decision": None,
+            "confidence": None,
+            "signal_color": "gray",
+            "hit_rate_pct": hit_rate_pct,
+            "hit_rate_trades": hit_rate_trades,
+            "hit_rate_window_days": 90,
+            "last_updated": None,
+            "blocking_reason": "Aguarde a analise (POST /api/analyze) para este ativo e timeframe.",
+            "agent_scores": {},
+            "fast_scalp_mode": False,
+            "news_gate_suppressed": False,
+            "chart_timeframe": tf,
+            "cache_hit": False,
+        }
+
+    alert = cached.get("alert_data") or {}
+    agent_scores = cached.get("agent_scores") or {}
+    failures = list(cached.get("agent_failures") or [])
+    fp = str(cached.get("fast_path_decision") or alert.get("fast_path_decision") or "block").lower()
+    strategy = alert.get("strategy") or {}
+    dir_raw = str(strategy.get("direction") or "flat").lower()
+    try:
+        aegis_score = float(alert.get("score") if alert.get("score") is not None else 0.0)
+    except (TypeError, ValueError):
+        aegis_score = 0.0
+
+    blocking_reason: Optional[str] = None
+    if fp == "block":
+        decision = "BLOQUEADO"
+        reasons = [str(x) for x in (strategy.get("reasons") or []) if x is not None]
+        blocking_reason = "; ".join(reasons[:4]) if reasons else "Fast path bloqueou o gatilho (decision=block)."
+    elif aegis_score >= 75.0 and dir_raw == "long":
+        decision = "COMPRA"
+    elif aegis_score >= 75.0 and dir_raw == "short":
+        decision = "VENDA"
+    else:
+        decision = "NEUTRO"
+
+    color_map = {"COMPRA": "green", "VENDA": "red", "NEUTRO": "amber", "BLOQUEADO": "gray"}
+    news_sup = _infer_news_gate_suppressed(alert, failures) and decision == "BLOQUEADO"
+    fast_scalp = str(strategy.get("mode") or "") == "fast_scalp"
+
+    return {
+        "asset": norm_asset,
+        "decision": decision,
+        "confidence": round(aegis_score, 2),
+        "signal_color": color_map.get(decision, "gray"),
+        "hit_rate_pct": hit_rate_pct,
+        "hit_rate_trades": hit_rate_trades,
+        "hit_rate_window_days": 90,
+        "last_updated": cached.get("recorded_at"),
+        "blocking_reason": blocking_reason,
+        "agent_scores": agent_scores,
+        "fast_scalp_mode": fast_scalp,
+        "news_gate_suppressed": news_sup,
+        "chart_timeframe": tf,
+        "cache_hit": True,
     }
 
 # --- Ciclo de Vida ---
@@ -540,6 +679,12 @@ def performance_asset_hit_ranking(
         min_trades=min_trades,
     )
     return {"success": True, "data": data}
+
+
+@app.get("/api/signal/summary/{asset}", tags=["Sinais"])
+def signal_summary(asset: str, timeframe: Optional[str] = None):
+    """Estado consolidado do sinal para a mesa (cache do ultimo POST /api/analyze no mesmo TF)."""
+    return _build_signal_summary_payload(asset, timeframe)
 
 
 @app.get("/api/copytrade/status", tags=["Broker"])

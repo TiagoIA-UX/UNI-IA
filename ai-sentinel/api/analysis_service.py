@@ -1,5 +1,6 @@
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.chart_timeframes import normalize_chart_timeframe, timeframe_strategy_legenda
@@ -50,6 +51,29 @@ class AnalysisService:
         from agents.argus_agent import ArgusAgent
 
         self.argus = ArgusAgent(feature_store=self.feature_store, outcome_tracker=self.outcome_tracker)
+        # Ultimo snapshot por (ativo, timeframe) para GET /api/signal/summary (evita 2º pipeline completo).
+        self._plataforma_signal_by_key: Dict[str, Dict[str, Any]] = {}
+
+    @staticmethod
+    def plataforma_signal_cache_key(asset: str, chart_tf: Optional[str]) -> str:
+        a = (asset or "").strip().upper().replace("-", "")
+        t = (chart_tf or "").strip().lower() or "default"
+        return f"{a}|{t}"
+
+    def record_plataforma_signal(
+        self,
+        asset: str,
+        chart_tf: Optional[str],
+        snapshot: Dict[str, Any],
+    ) -> None:
+        key = self.plataforma_signal_cache_key(asset, chart_tf)
+        self._plataforma_signal_by_key[key] = {
+            "recorded_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            **snapshot,
+        }
+
+    def get_plataforma_signal(self, asset: str, chart_tf: Optional[str]) -> Optional[Dict[str, Any]]:
+        return self._plataforma_signal_by_key.get(self.plataforma_signal_cache_key(asset, chart_tf))
 
     def _apply_sentinel_governance(self, alert: OpportunityAlert, governance_result: dict) -> OpportunityAlert:
         alert.governance = SentinelGovernanceDecision(

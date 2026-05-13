@@ -387,6 +387,178 @@ function TradingViewChart({ simboloTV, interval }: { simboloTV: string; interval
   )
 }
 
+// ─── Banner de sinal consolidado (mesa) ──────────────────────────────────────
+interface SignalBannerProps {
+  decisao: 'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO' | null
+  confianca: number | null
+  taxaAcerto: number | null
+  taxaTrades: number | null
+  atualizado: Date | null
+  bloqueioMotivo: string | null
+  newsGateSuppressed: boolean
+  carregando: boolean
+}
+
+function SignalBanner({
+  decisao,
+  confianca,
+  taxaAcerto,
+  taxaTrades,
+  atualizado,
+  bloqueioMotivo,
+  newsGateSuppressed,
+  carregando,
+}: SignalBannerProps) {
+  const CONFIG = {
+    COMPRA: { bg: 'rgba(34,197,94,0.12)', border: '#22c55e', texto: '#22c55e', label: 'COMPRA' },
+    VENDA: { bg: 'rgba(239,68,68,0.12)', border: '#ef4444', texto: '#ef4444', label: 'VENDA' },
+    NEUTRO: { bg: 'rgba(245,158,11,0.10)', border: '#f59e0b', texto: '#f59e0b', label: 'NEUTRO' },
+    BLOQUEADO: { bg: 'rgba(100,116,139,0.10)', border: '#64748b', texto: '#94a3b8', label: 'BLOQUEADO' },
+  } as const
+
+  const cfg = decisao ? CONFIG[decisao] : null
+
+  const [segsAtras, setSegsAtras] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSegsAtras(atualizado ? Math.floor((Date.now() - atualizado.getTime()) / 1000) : 0)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [atualizado])
+
+  const tempoLabel = segsAtras < 60
+    ? `${segsAtras}s atras`
+    : `${Math.floor(segsAtras / 60)}min atras`
+
+  return (
+    <div
+      style={{
+        background: cfg?.bg ?? 'rgba(100,116,139,0.06)',
+        border: `1px solid ${cfg?.border ?? '#334155'}`,
+        borderRadius: 12,
+        padding: '14px 16px',
+        marginBottom: 12,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {carregando ? (
+            <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#475569', letterSpacing: '-0.5px' }}>
+              Analisando...
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: '1.6rem',
+                fontWeight: 900,
+                color: cfg?.texto ?? '#475569',
+                letterSpacing: '-0.5px',
+                lineHeight: 1,
+              }}
+            >
+              {cfg?.label ?? '—'}
+            </span>
+          )}
+        </div>
+        {confianca !== null && !carregando && (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: cfg?.texto ?? '#475569', lineHeight: 1 }}>
+              {confianca.toFixed(0)}
+              <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#64748b', marginLeft: 2 }}>/100</span>
+            </div>
+            <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: 2 }}>forca do sinal</div>
+          </div>
+        )}
+      </div>
+
+      {confianca !== null && (
+        <div style={{ height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 3, marginBottom: 10, overflow: 'hidden' }}>
+          <div
+            style={{
+              height: '100%',
+              width: `${Math.min(100, confianca)}%`,
+              background: cfg?.border ?? '#334155',
+              borderRadius: 3,
+              transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
+            }}
+          />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div
+            style={{
+              fontSize: '0.65rem',
+              color: '#475569',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginBottom: 2,
+            }}
+          >
+            Taxa de acerto · 90 dias
+          </div>
+          {taxaAcerto !== null ? (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span
+                style={{
+                  fontSize: '1.1rem',
+                  fontWeight: 700,
+                  color: taxaAcerto >= 60 ? '#22c55e' : taxaAcerto >= 45 ? '#f59e0b' : '#ef4444',
+                }}
+              >
+                {taxaAcerto.toFixed(1)}%
+              </span>
+              {taxaTrades !== null && (
+                <span style={{ fontSize: '0.7rem', color: '#475569' }}>({taxaTrades} trades)</span>
+              )}
+            </div>
+          ) : (
+            <span style={{ fontSize: '0.75rem', color: '#334155' }}>Sem dados suficientes (&lt;5 trades)</span>
+          )}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '0.65rem', color: '#334155' }}>
+            {carregando ? 'atualizando...' : tempoLabel}
+          </div>
+        </div>
+      </div>
+
+      {decisao === 'BLOQUEADO' && bloqueioMotivo && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '6px 10px',
+            background: 'rgba(100,116,139,0.12)',
+            borderRadius: 6,
+            fontSize: '0.72rem',
+            color: '#94a3b8',
+            lineHeight: 1.5,
+          }}
+        >
+          {bloqueioMotivo}
+        </div>
+      )}
+
+      {newsGateSuppressed && (
+        <div
+          style={{
+            marginTop: 6,
+            padding: '5px 10px',
+            background: 'rgba(239,68,68,0.08)',
+            borderRadius: 6,
+            fontSize: '0.72rem',
+            color: '#f87171',
+          }}
+        >
+          Arara Azul bloqueou: noticia quente detectada — janela de risco ativa. Operacao suspensa ate a janela
+          encerrar.
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export default function PlataformaClient({ userEmail = '' }: { userEmail?: string }) {
   const [agentes, setAgentes] = useState<Agente[]>(AGENTES_BASE)
@@ -423,6 +595,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
   const [timeframe, setTimeframe] = useState<string>('H1')
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
   const [carregandoOport, setCarregandoOport] = useState(false)
+  const [sinalDecisao, setSinalDecisao] = useState<'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO' | null>(null)
+  const [sinalConfianca, setSinalConfianca] = useState<number | null>(null)
+  const [taxaAcerto, setTaxaAcerto] = useState<number | null>(null)
+  const [taxaTrades, setTaxaTrades] = useState<number | null>(null)
+  const [sinalAtualizado, setSinalAtualizado] = useState<Date | null>(null)
+  const [sinalBloqueioMotivo, setSinalBloqueioMotivo] = useState<string | null>(null)
+  const [newsGateSuppressed, setNewsGateSuppressed] = useState(false)
   /** Estado da mesa na API (paper/live, broker, copy trade automático). */
   const [mesaExecContext, setMesaExecContext] = useState<{
     mode: string
@@ -465,6 +644,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     setIntegrityScore(null)
     setAnaliseErro(null)
     setAnaliseModo(null)
+    setSinalDecisao(null)
+    setSinalConfianca(null)
+    setTaxaAcerto(null)
+    setTaxaTrades(null)
+    setSinalAtualizado(null)
+    setSinalBloqueioMotivo(null)
+    setNewsGateSuppressed(false)
     // 'precoAtual' propositalmente fora das deps: senão recriaria a operação a cada tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ativoSelecionado, timeframe])
@@ -640,13 +826,59 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
         ARGUS: 'ARGUS',
         AEGIS: 'AEGIS',
       }
+
+      let decisaoParaVoto: 'COMPRA' | 'VENDA' | 'NEUTRO' | 'BLOQUEADO' | null = null
+      try {
+        const sr = await fetch(
+          `${API_BASE}/api/signal/summary/${encodeURIComponent(assetPath)}?timeframe=${encodeURIComponent(row.canonical)}`,
+          { signal: ctrl.signal }
+        )
+        if (sr.ok) {
+          const sd = await sr.json() as {
+            decision?: string | null
+            confidence?: number | null
+            hit_rate_pct?: number | null
+            hit_rate_trades?: number | null
+            last_updated?: string | null
+            blocking_reason?: string | null
+            news_gate_suppressed?: boolean
+          }
+          const d = sd.decision
+          if (d === 'COMPRA' || d === 'VENDA' || d === 'NEUTRO' || d === 'BLOQUEADO') {
+            decisaoParaVoto = d
+          } else {
+            decisaoParaVoto = null
+          }
+          setSinalDecisao(decisaoParaVoto)
+          setSinalConfianca(typeof sd.confidence === 'number' ? sd.confidence : null)
+          setTaxaAcerto(typeof sd.hit_rate_pct === 'number' ? sd.hit_rate_pct : null)
+          setTaxaTrades(typeof sd.hit_rate_trades === 'number' ? sd.hit_rate_trades : null)
+          setSinalBloqueioMotivo(typeof sd.blocking_reason === 'string' ? sd.blocking_reason : null)
+          setNewsGateSuppressed(Boolean(sd.news_gate_suppressed))
+          if (sd.last_updated) {
+            const parsed = new Date(sd.last_updated)
+            setSinalAtualizado(Number.isFinite(parsed.getTime()) ? parsed : new Date())
+          } else {
+            setSinalAtualizado(new Date())
+          }
+        }
+      } catch {
+        /* nao bloqueia a analise de agentes */
+      }
+
       setAgentes(prev => prev.map(a => {
         const raw = scores[a.id]
         const failed = failureSet.has(idToBackendName[a.id] ?? a.id)
         const score: number | null = typeof raw === 'number' && Number.isFinite(raw) ? raw : null
         let voto: Agente['voto'] = null
         if (score != null) {
-          voto = score >= 75 ? 'COMPRA' : score >= 50 ? 'NEUTRO' : 'VENDA'
+          if (decisaoParaVoto === 'COMPRA') {
+            voto = score >= 70 ? 'COMPRA' : score >= 45 ? 'NEUTRO' : 'VENDA'
+          } else if (decisaoParaVoto === 'VENDA') {
+            voto = score <= 35 ? 'VENDA' : score <= 55 ? 'NEUTRO' : 'COMPRA'
+          } else {
+            voto = score >= 75 ? 'COMPRA' : score >= 50 ? 'NEUTRO' : 'VENDA'
+          }
         } else if (failed) {
           voto = 'REJEITADO'
         }
@@ -739,6 +971,13 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
       setAgentFailures([])
       setIntegrityScore(null)
       setAnaliseModo(null)
+      setSinalDecisao(null)
+      setSinalConfianca(null)
+      setTaxaAcerto(null)
+      setTaxaTrades(null)
+      setSinalAtualizado(null)
+      setSinalBloqueioMotivo(null)
+      setNewsGateSuppressed(false)
     } finally {
       clearTimeout(timeoutId)
       // Só desliga o "carregando" se essa chamada ainda for a atual (não foi superseded).
@@ -755,13 +994,12 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
     let nextTimer: ReturnType<typeof setTimeout> | null = null
     const tfRowLoop = resolveTfRow(tfCatalog, timeframe)
 
-    // Primeira leitura ao abrir/trocar ativo; depois só no fechamento confirmado da vela do timeframe.
-    // Isso evita "repaint" visual e score oscilando a cada 60s no meio de um candle M15/H1.
-    const executarEAgendar = async () => {
+    const executarEAgendar = () => {
       if (cancelled) return
-      await buscarAnalise(ativoSelecionado.simbolo, timeframe)
-      if (cancelled) return
-      nextTimer = setTimeout(executarEAgendar, delayAteFechamentoConfirmado(tfRowLoop.canonical))
+      void buscarAnalise(ativoSelecionado.simbolo, timeframe).finally(() => {
+        if (cancelled) return
+        nextTimer = setTimeout(executarEAgendar, delayAteFechamentoConfirmado(tfRowLoop.canonical))
+      })
     }
 
     executarEAgendar()
@@ -1401,6 +1639,7 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
           <div className={styles.graficoBox}>
             <div className={styles.chartFrame}>
               <TradingViewChart
+                key={`${ativoSelecionado.simbolo}-${timeframe}`}
                 simboloTV={ativoSelecionado.tv}
                 interval={tfRow.tv}
               />
@@ -1410,6 +1649,16 @@ export default function PlataformaClient({ userEmail = '' }: { userEmail?: strin
 
         {/* ── COLUNA DIREITA: AGENTES (drawer colapsavel) ────────────────── */}
         <aside className={`${styles.colunaDireita} ${guardioesAbertos ? '' : styles.colunaDireitaFechada}`}>
+          <SignalBanner
+            decisao={sinalDecisao}
+            confianca={sinalConfianca}
+            taxaAcerto={taxaAcerto}
+            taxaTrades={taxaTrades}
+            atualizado={sinalAtualizado}
+            bloqueioMotivo={sinalBloqueioMotivo}
+            newsGateSuppressed={newsGateSuppressed}
+            carregando={carregandoAnalise}
+          />
           <div className={styles.agentesHeader}>
             {guardioesAbertos ? (
               <>
