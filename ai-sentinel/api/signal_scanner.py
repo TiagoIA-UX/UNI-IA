@@ -208,6 +208,7 @@ class SignalScanner:
             "interval_seconds": max(float(os.getenv("SIGNAL_SCAN_INTERVAL_SECONDS", "60")), 10.0),
             "stagger_seconds": max(float(os.getenv("SIGNAL_SCAN_STAGGER_SECONDS", "2")), 0.0),
             "min_score": float(os.getenv("SIGNAL_MIN_SCORE", "75")),
+            "min_integrity_score": float(os.getenv("SIGNAL_MIN_INTEGRITY_SCORE", "0")),
             "allowed_classifications": allowed_classifications,
             "dedupe_ttl_seconds": max(float(os.getenv("SIGNAL_DEDUPE_TTL_SECONDS", "300")), 30.0),
             "confirmed_candle_ttl_seconds": max(float(os.getenv("SIGNAL_CONFIRMED_CANDLE_TTL_SECONDS", "86400")), 3600.0),
@@ -295,6 +296,8 @@ class SignalScanner:
     def _is_eligible(self, alert: OpportunityAlert, cfg: Dict[str, Any]) -> bool:
         if float(alert.score) < cfg["min_score"]:
             return False
+        if float(cfg.get("min_integrity_score") or 0) > 0 and float(alert.integrity_score) < float(cfg["min_integrity_score"]):
+            return False
         if cfg["allowed_classifications"] and normalize_classification(alert.classification) not in cfg["allowed_classifications"]:
             return False
         return True
@@ -306,12 +309,12 @@ class SignalScanner:
 
     def _dispatch_telegram(self, alert: OpportunityAlert, preview: Dict[str, Any]) -> Dict[str, Any]:
         if self._strict_operational_mode():
-            self.telegram_bot.dispatch_alert(alert, operational_context=preview)
-            return {"success": True, "dispatched": True}
+            dispatched = bool(self.telegram_bot.dispatch_alert(alert, operational_context=preview))
+            return {"success": True, "dispatched": dispatched}
 
         try:
-            self.telegram_bot.dispatch_alert(alert, operational_context=preview)
-            return {"success": True, "dispatched": True}
+            dispatched = bool(self.telegram_bot.dispatch_alert(alert, operational_context=preview))
+            return {"success": True, "dispatched": dispatched}
         except Exception as telegram_error:
             return {
                 "success": False,

@@ -1,10 +1,19 @@
 import html
 import os
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import requests
+from core.contract_validation import normalize_classification
 from core.schemas import OpportunityAlert
+
+
+def _env_truthy(key: str, default: bool = False) -> bool:
+    raw = os.getenv(key)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
 
 class UniIATelegramBot:
     def __init__(self):
@@ -36,6 +45,63 @@ class UniIATelegramBot:
             missing.append("TELEGRAM_PREMIUM_CHANNEL")
         if missing:
             raise RuntimeError(f"Telegram nao configurado. Variaveis faltando: {', '.join(missing)}")
+
+    def _should_dispatch_public_alert(self, alert: OpportunityAlert) -> Tuple[bool, str]:
+        """Cadeia de seguranca antes de publicar em canais Free/Premium.
+
+        Boas praticas operacionais / governanca de capital:
+        - Nao divulgar como sinal publico quando o SENTINEL nao aprovou.
+        - Restringir classificacoes (por defeito so OPORTUNIDADE).
+        - Nao divulgar direcao FLAT como convite a operar.
+        - Exigir integridade minima do pipeline (muitos agentes falhados = leitura fraca).
+        - Quando o motor rapido bloqueia (fast_path=block), nao misturar com "dica de trade"
+          em canais amplos — isso reduz sinais contraditorios (ATLAS/FAST_PATH vs AEGIS).
+        """
+        if _env_truthy("TELEGRAM_PUBLIC_DISPATCH_REQUIRE_APPROVED", True):
+            if alert.governance is None:
+                return False, "governance_ausente"
+            if not alert.governance.approved:
+                return False, "sentinel_nao_aprovou"
+
+        if _env_truthy("TELEGRAM_REQUIRE_FAST_PATH_NOT_BLOCK", True):
+            fp = (alert.fast_path_decision or "").strip().lower()
+            if fp == "block":
+                return False, "fast_path_block"
+
+        min_score = float(os.getenv("TELEGRAM_MIN_SCORE", "75"))
+        if float(alert.score) < min_score:
+            return False, "score_abaixo_minimo_telegram"
+
+        min_integ = float(os.getenv("TELEGRAM_MIN_INTEGRITY_SCORE", "60"))
+        if float(getattr(alert, "integrity_score", 100.0) or 0.0) < min_integ:
+            return False, "integridade_abaixo_minimo"
+
+        allow_raw = (os.getenv("TELEGRAM_PUBLIC_CLASSIFICATIONS") or "OPORTUNIDADE").strip()
+        allowed: set = set()
+        for part in allow_raw.split(","):
+            p = part.strip()
+            if not p:
+                continue
+            try:
+                allowed.add(normalize_classification(p))
+            except Exception:
+                continue
+        if not allowed:
+            allowed = {"OPORTUNIDADE"}
+        try:
+            cls_norm = normalize_classification(alert.classification)
+        except Exception:
+            return False, "classificacao_invalida"
+        if cls_norm not in allowed:
+            return False, f"classificacao_{cls_norm}_fora_da_lista"
+
+        if _env_truthy("TELEGRAM_SKIP_FLAT_DIRECTION", True):
+            if not alert.strategy:
+                return False, "estrategia_ausente"
+            if str(alert.strategy.direction or "").lower() == "flat":
+                return False, "direcao_flat"
+
+        return True, "ok"
 
     def _post_message(self, token: str, chat_id: str, message: str, parse_mode: Optional[str] = "HTML"):
         last_err = None
@@ -69,13 +135,20 @@ class UniIATelegramBot:
             raise RuntimeError("TELEGRAM_BOT_TOKEN nao configurado para comandos administrativos.")
         self._post_message(self.bot_token, chat_id, message, parse_mode=None)
         
-    def dispatch_alert(self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None):
+    def dispatch_alert(self, alert: OpportunityAlert, operational_context: Optional[Dict[str, str]] = None) -> bool:
         """
         Método central do robô UNI IA.
         Decide o destino do sinal baseado nas regras de negócio (Free vs Premium).
+
+        Returns:
+            True se uma mensagem foi enviada a Free ou Premium; False se bloqueado pelos gates.
         """
-        
         self._validate_config()
+
+        ok, reason = self._should_dispatch_public_alert(alert)
+        if not ok:
+            print(f"Telegram: envio publico ignorado ({reason}) — {alert.asset}")
+            return False
 
         # Premium para ativos com USD/EUR/BRL no par.
         premium_assets = ["USD", "EUR", "BRL", "BTC", "ETH", "SOL"]
@@ -86,6 +159,7 @@ class UniIATelegramBot:
             self._send_to_premium(alert, operational_context)
         else:
             self._send_to_free(alert, operational_context)
+        return True
             
     def _format_message(self, alert: OpportunityAlert, is_premium: bool, operational_context: Optional[Dict[str, str]] = None) -> str:
         """Formata o alerta em HTML (parse_mode HTML) com escape de conteudo dinamico."""
@@ -148,6 +222,12 @@ class UniIATelegramBot:
         if alert.position_reversal_alert:
             lines.append("")
             lines.append(f"🚨 <b>REVERSAO:</b> {esc(alert.position_reversal_alert)}")
+
+        lines.append("")
+        lines.append(
+            "⚖️ <i>Conteudo educativo/operacional interno; nao e recomendacao personalizada, "
+            "ordem ou promessa de resultado. Criptoativos: risco de perda total do capital.</i>"
+        )
 
         return "\n".join(lines)
 

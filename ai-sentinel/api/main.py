@@ -195,9 +195,11 @@ def analyze_asset_pipeline(asset: str, chart_timeframe: Optional[str] = None) ->
     except Exception as audit_error:
         logger.warning(f"Erro ao registrar auditoria: {audit_error}")
 
-    telegram_result = {"success": True, "dispatched": True}
+    telegram_result = {"success": True, "dispatched": False}
     try:
-        telegram_bot.dispatch_alert(alert, operational_context=desk_preview)
+        telegram_result["dispatched"] = bool(
+            telegram_bot.dispatch_alert(alert, operational_context=desk_preview)
+        )
     except Exception as telegram_error:
         logger.error(f"Falha no despacho Telegram: {telegram_error}")
         telegram_result = {"success": False, "dispatched": False, "error": str(telegram_error)}

@@ -103,7 +103,7 @@ class _FakeTelegramBot:
     def dispatch_alert(self, alert, operational_context=None):
         if self.should_fail:
             raise RuntimeError("telegram_dispatch_failed")
-        return None
+        return True
 
 
 class _FakeAnalysisService:
