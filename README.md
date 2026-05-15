@@ -1,6 +1,6 @@
 # Boitatá IA — Suporte institucional à decisão em investimentos
 
-**Repositório:** [TiagoIA-UX/UNI-IA](https://github.com/TiagoIA-UX/UNI-IA)
+**Repositório:** [TiagoIA-UX/BOITATA-IA](https://github.com/TiagoIA-UX/BOITATA-IA.git)
 
 ---
 
